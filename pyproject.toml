@@ -16,5 +16,6 @@ authors = [
 dependencies = [
     "matplotlib",
     "numpy",
+    "scipy",
     "pytest",
 ]
