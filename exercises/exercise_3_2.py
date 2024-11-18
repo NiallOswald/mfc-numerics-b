@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.sparse as sp
 
 
 def poisson_1d(S, alpha, beta, mesh, node_map):
@@ -10,7 +11,7 @@ def poisson_1d(S, alpha, beta, mesh, node_map):
     f_loc = lambda a, b: (b - a) / 6 * np.array([2 * S(a) + S(b), S(a) + 2 * S(b)])
 
     # Compute the global stiffness matrix
-    K = np.zeros((len(mesh), len(mesh)))
+    K = sp.lil_matrix((len(mesh), len(mesh)))
     f = np.zeros_like(mesh)
     for e in node_map:
         K[np.ix_(e, e)] += K_loc(*mesh[e])
@@ -25,7 +26,8 @@ def poisson_1d(S, alpha, beta, mesh, node_map):
     f[-1] += beta
 
     # Solve the system
-    c = np.linalg.solve(K, f)
+    K = sp.csr_matrix(K)
+    c = sp.linalg.spsolve(K, f)
 
     return c
 
