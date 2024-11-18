@@ -51,7 +51,6 @@ def __main__():
     plt.plot(mesh, psi, "k-")
     plt.xlabel(r"$x$")
     plt.ylabel(r"$\psi(x)$")
-    plt.legend()
     plt.show()
 
 
