@@ -21,7 +21,7 @@ def test_simple(alpha, beta):
 
     # Solve the system
     psi_new = poisson_1d(S, alpha, beta, mesh, node_map)
-    psi_old = simple_fem(S, alpha, beta, mesh, node_map)
+    psi_old = simple_fem(alpha, beta)
 
     # Check the solution
     assert np.allclose(psi_new, psi_old)
