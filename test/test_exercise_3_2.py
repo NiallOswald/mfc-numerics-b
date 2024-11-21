@@ -10,7 +10,7 @@ import pytest
 def test_simple(alpha, beta):
     """Test the FEM against the simple implementation."""
     n_elems = 2
-    S = lambda x: 1 - x  # noqa: E731
+    S = lambda x: 1 - x
 
     # Generate a uniform mesh
     mesh = np.linspace(0, 1, n_elems + 1)
@@ -30,8 +30,8 @@ def test_simple(alpha, beta):
 def test_convergence():
     """Test the convergence rate of the FEM."""
     n_vals = 2 ** np.arange(3, 12)
-    S = lambda x: (1 - x) ** 2  # noqa: E731
-    exact_sol = lambda x: x * (4 - 6 * x + 4 * x**2 - x**3) / 12  # noqa: E731
+    S = lambda x: (1 - x) ** 2
+    exact_sol = lambda x: x * (4 - 6 * x + 4 * x**2 - x**3) / 12
 
     # Compute the error
     errors = []

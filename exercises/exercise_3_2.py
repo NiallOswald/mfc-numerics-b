@@ -35,7 +35,7 @@ def poisson_1d(S, alpha, beta, mesh, node_map):
 def __main__():
     # Parameters
     N_ELEMS = 100
-    S = lambda x: (1 - x) ** 2  # noqa: E731
+    S = lambda x: (1 - x) ** 2
 
     # Generate a uniform mesh
     mesh = np.linspace(0, 1, N_ELEMS + 1)
