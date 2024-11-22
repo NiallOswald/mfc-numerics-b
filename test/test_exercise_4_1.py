@@ -1,7 +1,40 @@
 """Tests for exercise 4.1."""
 
-from exercises.exercise_4_1 import generate_2d_grid, poisson_2d
+from exercises.exercise_4_1 import generate_2d_grid, J, J_inv, K_loc, f_loc, poisson_2d
 import numpy as np
+
+
+def test_J():
+    mesh = np.array([[0, 0], [1, 0], [0, 1]])
+    node_map = np.array([[0, 1, 2]])
+
+    assert np.allclose(J(*mesh[node_map[0]]), np.eye(2))
+
+
+def test_J_inv():
+    mesh = np.array([[0, 0], [1, 0], [0, 1]])
+    node_map = np.array([[0, 1, 2]])
+
+    assert np.allclose(J_inv(*mesh[node_map[0]]), np.eye(2))
+
+
+def test_K_loc():
+    mesh = np.array([[0, 0], [1, 0], [0, 1]])
+    node_map = np.array([[0, 1, 2]])
+
+    K = K_loc(*mesh[node_map[0]])
+
+    assert np.allclose(K, np.array([[1, -0.5, -0.5], [-0.5, 0.5, 0], [-0.5, 0, 0.5]]))
+
+
+def test_f_loc():
+    mesh = np.array([[0, 0], [1, 0], [0, 1]])
+    node_map = np.array([[0, 1, 2]])
+    S = lambda x: 1.0
+
+    f = f_loc(S, *mesh[node_map[0]])
+
+    assert np.allclose(f, np.array([1 / 6, 1 / 6, 1 / 6]))
 
 
 def test_simple():
