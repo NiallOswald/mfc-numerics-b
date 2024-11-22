@@ -6,13 +6,13 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
 
-def solve_diffusion(fn, degree, mesh, node_map, boundaries):
+def solve_diffusion(fn, mesh, node_map, boundaries):
     """Solve the diffusion equation on a mesh."""
     # Get the quadrature points and weights
-    points, weights = gauss_quadrature(2 * degree)
+    points, weights = gauss_quadrature(2)
 
     # Define the finite element
-    fe = LagrangeElement(degree)
+    fe = LagrangeElement(1)
 
     # Tabulate the shape functions and their gradients
     phi = fe.tabulate(points)
@@ -60,9 +60,6 @@ if __name__ == "__main__":
     source = np.array([450000, 175000])
     extent = 10000
 
-    # Set the degree of the finite element
-    degree = 1
-
     # Load the mesh
     nodes, node_map, boundary_nodes = load_mesh("esw", "6_25k")
 
@@ -72,7 +69,7 @@ if __name__ == "__main__":
     print(fn.shape)
 
     # Solve the diffusion equation
-    c = solve_diffusion(fn, degree, nodes, node_map, boundary_nodes)
+    c = solve_diffusion(fn, nodes, node_map, boundary_nodes)
 
     plt.tripcolor(nodes[:, 0], nodes[:, 1], node_map, c)
     plt.colorbar()
