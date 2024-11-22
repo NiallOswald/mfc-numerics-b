@@ -75,13 +75,17 @@ def J_inv(x_0, x_1, x_2):
 
 def K_loc(*e):
     """Compute the local stiffness matrix."""
-    return np.einsum(
-        "ai,ij,bk,kj->ab",
-        grad_phi(),
-        J_inv(*e),
-        grad_phi(),
-        J_inv(*e),
-    ) * np.linalg.det(J(*e))
+    return (
+        np.einsum(
+            "ai,ij,bk,kj->ab",
+            grad_phi(),
+            J_inv(*e),
+            grad_phi(),
+            J_inv(*e),
+        )
+        * np.linalg.det(J(*e))
+        / 2
+    )
 
 
 def f_loc(S, *e):
