@@ -63,12 +63,11 @@ class FiniteElement:
 
 class LagrangeElement(FiniteElement):
     def __init__(self, degree):
-        self.degree = degree
-        self.nodes = lagrange_points(degree)
+        nodes = lagrange_points(degree)
 
         self._cell_jacobian = None
 
-        super(LagrangeElement, self).__init__(degree, self.nodes)
+        super(LagrangeElement, self).__init__(degree, nodes)
 
     @property
     def cell_jacobian(self):
