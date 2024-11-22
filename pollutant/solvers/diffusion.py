@@ -66,7 +66,6 @@ if __name__ == "__main__":
     # Define the source term
     fn = np.zeros(len(nodes))
     fn[np.linalg.norm(nodes - source, axis=1) < extent] = 1.0
-    print(fn.shape)
 
     # Solve the diffusion equation
     c = solve_diffusion(fn, nodes, node_map, boundary_nodes)
