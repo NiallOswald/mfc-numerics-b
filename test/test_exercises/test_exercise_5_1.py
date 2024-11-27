@@ -15,8 +15,6 @@ def test_steady_state(t_final, tol, N_ELEMS=20, dt=1e-4):
     alpha = 0.0
     beta = 0.0
 
-    t_final = 1.0
-
     # Generate a uniform mesh
     mesh = np.linspace(0, 1, N_ELEMS + 1)
 
