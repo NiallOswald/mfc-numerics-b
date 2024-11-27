@@ -74,27 +74,29 @@ def dt_advection_diffusion_1d(psi, S, u, mu, alpha, beta, mesh, node_map):
     M[0, 0] = 1
 
     # Solve the system
-    time_start = time.time()
     M = sp.csr_matrix(M)
     K = sp.csr_matrix(K)
-    dtpsi = sp.linalg.spsolve(M, f - K @ psi)
-    print(time.time() - time_start)
 
-    return dtpsi
+    if psi == "optimize":
+        return lambda psi: sp.linalg.spsolve(M, f - K @ psi)
+    else:
+        return sp.linalg.spsolve(M, f - K @ psi)
 
 
 def __main__():
     # Parameters
-    N_ELEMS = 10
-    psi_init = lambda x: -(x - 0.4) * (x - 0.6) if abs(x - 0.5) < 0.1 else 0
-    S = lambda x: 0.0
-    u = 1.0
-    mu = 0.1
+    N_ELEMS = 20
+    psi_init = lambda x: 0.0
+    S = lambda x: 1.0 - x
+    u = 0.0
+    mu = 1.0
     alpha = 0
     beta = 0
 
-    dt = 1e-3
-    n_steps = 100
+    dt = 1e-4
+    t_final = 2.0
+
+    n_steps = int(t_final / dt)
 
     # Generate a uniform mesh
     mesh = np.linspace(0, 1, N_ELEMS + 1)
@@ -105,16 +107,18 @@ def __main__():
     node_order = np.arange(N_ELEMS, dtype=np.int64)[:, np.newaxis]
     node_map = np.hstack([node_order, node_order + 1])
 
-    # Solve the system using the method of lines
+    # Cache the time derivative
     args = (S, u, mu, alpha, beta, mesh, node_map)
+    psi_dt = dt_advection_diffusion_1d("optimize", *args)
+
+    # Solve the system using the method of lines
     with alive_bar(n_steps) as bar:
         for i in range(n_steps):
-            psi_step = psi + dt * dt_advection_diffusion_1d(psi, *args)
+            psi += dt * psi_dt(psi)
             bar()
 
     # Plot the solution
-    plt.plot(mesh, psi, "k-", label=r"$\psi(x, t)$")
-    plt.plot(mesh, np.array([psi_init(x) for x in mesh]), "k--", label=r"$\psi(x, 0)$")
+    plt.plot(mesh, psi, "k-", label=rf"$\psi(x, {t_final})$")
     plt.xlabel(r"$x$")
     plt.ylabel(r"$\psi(x, t)$")
     plt.legend()
