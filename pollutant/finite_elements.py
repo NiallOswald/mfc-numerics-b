@@ -1,5 +1,7 @@
 import numpy as np
 
+np.seterr(invalid="ignore", divide="ignore")
+
 
 def lagrange_points(degree):
     """Construct the locations of the Lagrange points for polynomials of the
