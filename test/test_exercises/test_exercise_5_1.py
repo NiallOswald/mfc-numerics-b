@@ -8,6 +8,7 @@ import pytest
 
 @pytest.mark.parametrize("t_final, tol", zip([2.5, 5.0], [1e-3, 1e-4]))
 def test_steady_state(t_final, tol, N_ELEMS=20, dt=1e-4):
+    """Test the advection-diffusion solver for a steady state solution."""
     # Parameters
     S = lambda x: 1.0 - x
     u = 0.0
@@ -23,7 +24,7 @@ def test_steady_state(t_final, tol, N_ELEMS=20, dt=1e-4):
     node_map = np.hstack([node_order, node_order + 1])
 
     # Cache the time derivative
-    args = (S, u, mu, alpha, beta, mesh, node_map)
+    args = (S, u, mu, beta, mesh, node_map)
     psi_dt = dt_advection_diffusion_1d("optimize", *args)
 
     # Solve the system using the method of lines
