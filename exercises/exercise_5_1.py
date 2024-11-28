@@ -4,7 +4,6 @@ from alive_progress import alive_bar
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse as sp
-import time
 
 
 def global_map(xi, a, b):
