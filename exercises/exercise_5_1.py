@@ -42,7 +42,7 @@ def f_loc(a, b, S):
     return np.array([2 * S(a) + S(b), S(a) + 2 * S(b)]) * J(a, b) / 6
 
 
-def dt_advection_diffusion_1d(psi, S, u, mu, alpha, beta, mesh, node_map):
+def dt_advection_diffusion_1d(psi, S, u, mu, beta, mesh, node_map):
     # Compute the global stiffness and mass matrix
     M = sp.lil_matrix((len(mesh), len(mesh)))
     K = sp.lil_matrix((len(mesh), len(mesh)))
@@ -52,26 +52,17 @@ def dt_advection_diffusion_1d(psi, S, u, mu, alpha, beta, mesh, node_map):
         K[np.ix_(e, e)] += K_loc(*mesh[e], mu, u)
         f[e] += f_loc(*mesh[e], S)
 
-    left = node_map[0]
-    right = node_map[-1]
-
-    # Set the dirichlet boundary conditions
-    """ K[np.ix_(left, left)] += (
-        mu * phi(0)[:, np.newaxis] @ grad_phi(0)[np.newaxis, :] * inv_J(*mesh[left])
-    )
-    print("AHHHHH")
-    print(phi(0)[:, np.newaxis] @ grad_phi(0)[np.newaxis, :] * inv_J(*mesh[left]))
-    f[0] += u * alpha """
-
-    # Set the neumann boundary conditions
-    K[np.ix_(right, right)] += u * phi(1)[:, np.newaxis] @ phi(1)[np.newaxis, :]
-    f[-1] += mu * beta
+    dirichlet = 0
+    neumann = -1
 
     # Set the dirichlet boundary condition
-    M[0] = 0
-    K[0] = 0
-    f[0] = 0
-    M[0, 0] = 1
+    M[dirichlet], K[dirichlet], f[dirichlet] = 0, 0, 0
+    M[dirichlet, dirichlet] = 1
+
+    # Set the neumann boundary conditions
+    e = node_map[neumann]
+    K[np.ix_(e, e)] += u * phi(1)[:, np.newaxis] @ phi(1)[np.newaxis, :]
+    f[neumann] += mu * beta
 
     # Solve the system
     M = sp.csr_matrix(M)
@@ -88,13 +79,14 @@ def __main__():
     N_ELEMS = 20
     psi_init = lambda x: 0.0
     S = lambda x: 1.0 - x
+    exact = lambda x: x * (x**2 - 3 * x + 3) / 6
+
     u = 0.0
     mu = 1.0
-    alpha = 0
     beta = 0
 
     dt = 1e-4
-    t_final = 2.0
+    t_final = 1.0
 
     n_steps = int(t_final / dt)
 
@@ -108,7 +100,7 @@ def __main__():
     node_map = np.hstack([node_order, node_order + 1])
 
     # Cache the time derivative
-    args = (S, u, mu, alpha, beta, mesh, node_map)
+    args = (S, u, mu, beta, mesh, node_map)
     psi_dt = dt_advection_diffusion_1d("optimize", *args)
 
     # Solve the system using the method of lines
@@ -118,7 +110,8 @@ def __main__():
             bar()
 
     # Plot the solution
-    plt.plot(mesh, psi, "k-", label=rf"$\psi(x, {t_final})$")
+    plt.plot(mesh, psi, "k-", label=rf"Numerical $t = {t_final}$")
+    plt.plot(mesh, exact(mesh), "k--", label="Exact")
     plt.xlabel(r"$x$")
     plt.ylabel(r"$\psi(x, t)$")
     plt.legend()
