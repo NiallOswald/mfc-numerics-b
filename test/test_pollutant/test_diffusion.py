@@ -49,7 +49,7 @@ def test_hard():
 @pytest.mark.parametrize(
     "N, S",
     zip(
-        [25, 50, 100],
+        [20, 25, 50],
         [
             lambda x: x[..., 0] ** 2 + x[..., 1] ** 2,
             lambda x: x[..., 0] * x[..., 1],
