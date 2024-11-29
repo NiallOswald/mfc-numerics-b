@@ -1,6 +1,6 @@
 """Solve the diffusion equation on the provided mesh."""
 
-from pollutant import LagrangeElement, gauss_quadrature, load_mesh
+from pollutant import LagrangeElement, ReferenceTriangle, gauss_quadrature, load_mesh
 import numpy as np
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 def solve_diffusion(fn, mesh, node_map, boundaries):
     """Solve the diffusion equation on a mesh."""
     # Get the quadrature points and weights
-    points, weights = gauss_quadrature(2)
+    points, weights = gauss_quadrature(ReferenceTriangle, 2)
 
     # Define the finite element
-    fe = LagrangeElement(1)
+    fe = LagrangeElement(ReferenceTriangle, 1)
 
     # Tabulate the shape functions and their gradients
     phi = fe.tabulate(points)
