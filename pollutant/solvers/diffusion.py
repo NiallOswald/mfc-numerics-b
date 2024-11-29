@@ -24,7 +24,7 @@ def solve_diffusion(fn, mesh, node_map, boundaries):
     for e, nodes in enumerate(node_map):
         J = np.einsum("ja,jb", mesh[nodes], fe.cell_jacobian, optimize=True)
         inv_J = np.linalg.inv(J)
-        det_J = abs(np.linalg.det(J))
+        det_J = np.linalg.det(J)
 
         K[np.ix_(nodes, nodes)] += (
             np.einsum(
