@@ -9,6 +9,7 @@ from pollutant import (
 )
 from alive_progress import alive_it
 import numpy as np
+from scipy.integrate import solve_ivp
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
@@ -162,16 +163,30 @@ if __name__ == "__main__":
     kappa = 1e2
 
     t_final = 1200
-    dt = 1e-2
 
     args = (S, u, kappa, nodes, node_map, boundary_nodes)
 
-    # Solve the diffusion equation
-    c = np.zeros(len(nodes))
-    c_dt = dt_advection_diffusion("optimize", *args)
-    for i in alive_it(range(int(t_final / dt)), title="Iterating over time..."):
-        c += dt * c_dt(c)
+    # Cache the time derivatives
+    c_dt, norms = dt_advection_diffusion("optimize", *args, return_norms=True)
 
-    plt.tripcolor(nodes[:, 0], nodes[:, 1], node_map, c)
-    plt.colorbar()
-    plt.show()
+    # Solve the advection-diffusion equation
+    c = np.zeros(len(nodes))
+    sol = solve_ivp(
+        lambda t, x: c_dt(x),
+        (0, t_final),
+        c,
+        method="LSODA",
+        max_step=1e2,
+    )
+
+    # Plot the concentration over the mesh
+    for i in range(0, len(sol.t), len(sol.t) // 10):
+        plt.tripcolor(
+            nodes[:, 0],
+            nodes[:, 1],
+            node_map,
+            sol.y[:, i],  # shading="gouraud"
+        )
+        plt.colorbar()
+        plt.title(f"Time: {sol.t[i]:.2f}")
+        plt.show()
