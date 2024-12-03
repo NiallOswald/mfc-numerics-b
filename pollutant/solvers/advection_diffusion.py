@@ -13,7 +13,16 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
 
-def dt_advection_diffusion(c, S, u, kappa, mesh, node_map, boundaries):
+def dt_advection_diffusion(
+    c,
+    S,
+    u,
+    kappa,
+    mesh,
+    node_map,
+    boundaries,
+    return_norms=False,
+):
     """Compute the time-derivative for the advection-diffusion equation on a mesh."""
     # Get the quadrature points and weights
     points, weights = gauss_quadrature(ReferenceTriangle, 2)
@@ -28,6 +37,10 @@ def dt_advection_diffusion(c, S, u, kappa, mesh, node_map, boundaries):
     grad_phi = fe.tabulate(points, grad=True)
 
     phi_1d = fe_1d.tabulate(points_1d)
+
+    # Setup empty list for the boundary normal vectors
+    if return_norms:
+        norms = []
 
     # Compute the global mass and stiffness matrix
     M = sp.lil_matrix((len(mesh), len(mesh)))
@@ -86,20 +99,33 @@ def dt_advection_diffusion(c, S, u, kappa, mesh, node_map, boundaries):
             * det_J
         )
 
-        boundary_nodes = np.array([node for node in nodes if node in boundaries])
+        edges = np.column_stack([nodes, np.roll(nodes, -1)])
+        for edge_index, edge in enumerate(edges):
+            if not np.isin(edge, boundaries).all():
+                continue
 
-        if len(boundary_nodes) == 2:
-            J_1d = np.einsum("ja,jb", mesh[boundary_nodes], fe_1d.cell_jacobian)
+            reference_normal = ReferenceTriangle.cell_normals[edge_index]
+
+            J_1d = np.einsum("ja,jb", mesh[edge], fe_1d.cell_jacobian).T[0]
             det_J_1d = np.linalg.norm(J_1d)
-            normal = np.array([J_1d[1, 0], -J_1d[0, 0]]) / det_J_1d
 
-            K[np.ix_(boundary_nodes, boundary_nodes)] += (
+            normal = np.einsum(
+                "ab,b->a",
+                inv_J.T,
+                reference_normal,
+            )
+            normal /= np.linalg.norm(normal)
+
+            if return_norms:
+                norms.append([mesh[edge], normal])
+
+            K[np.ix_(edge, edge)] = (
                 np.einsum(
                     "qa,qb,qc,ck,k,q->ab",
                     phi_1d,
                     phi_1d,
                     phi_1d,
-                    u[boundary_nodes],
+                    u[edge],
                     normal,
                     weights_1d,
                 )
@@ -110,9 +136,14 @@ def dt_advection_diffusion(c, S, u, kappa, mesh, node_map, boundaries):
     K = sp.csr_matrix(K)
 
     if c == "optimize":
-        return lambda c: sp.linalg.spsolve(M, f - K @ c)
+        c_dt = lambda c: sp.linalg.spsolve(M, f - K @ c)
     else:
-        return sp.linalg.spsolve(M, f - K @ c)
+        c_dt = sp.linalg.spsolve(M, f - K @ c)
+
+    if return_norms:
+        return c_dt, norms
+    else:
+        return c_dt
 
 
 if __name__ == "__main__":
