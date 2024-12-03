@@ -23,6 +23,7 @@ def dt_advection_diffusion(
     mesh,
     node_map,
     boundaries,
+    boundary_type="Robin",
     return_norms=False,
 ):
     """Compute the time-derivative for the advection-diffusion equation on a mesh."""
@@ -101,6 +102,9 @@ def dt_advection_diffusion(
             * det_J
         )
 
+        if boundary_type == "Robin":
+            continue
+
         edges = np.column_stack([nodes, np.roll(nodes, -1)])
         for edge_index, edge in enumerate(edges):
             if not np.isin(edge, boundaries).all():
@@ -121,17 +125,25 @@ def dt_advection_diffusion(
             if return_norms:
                 norms.append([mesh[edge], normal])
 
-            K[np.ix_(edge, edge)] = (
-                np.einsum(
-                    "qa,qb,qc,ck,k,q->ab",
-                    phi_1d,
-                    phi_1d,
-                    phi_1d,
-                    u[edge],
-                    normal,
-                    weights_1d,
+            if boundary_type == "Dirichlet":
+                raise NotImplementedError(
+                    "Dirichlet boundary conditions not implemented"
                 )
-            ) * det_J_1d
+
+            elif boundary_type == "Neumann":
+                K[np.ix_(edge, edge)] = (
+                    np.einsum(
+                        "qa,qb,qc,ck,k,q->ab",
+                        phi_1d,
+                        phi_1d,
+                        phi_1d,
+                        u[edge],
+                        normal,
+                        weights_1d,
+                    )
+                ) * det_J_1d
+            else:
+                raise ValueError("Invalid boundary type")
 
     # Solve the system
     M = sp.csr_matrix(M)
