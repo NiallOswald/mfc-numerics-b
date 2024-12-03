@@ -3,7 +3,7 @@
 from pollutant.finite_elements import LagrangeElement
 from pollutant.reference_elements import ReferenceTriangle
 from pollutant.quadrature import gauss_quadrature
-from pollutant.utils import load_mesh, gaussian_source
+from pollutant.utils import load_mesh, find_element, gaussian_source
 from pollutant.constants import SOUTHAMPTON, READING
 
 import numpy as np
@@ -71,6 +71,24 @@ if __name__ == "__main__":
     # Solve the diffusion equation
     c = solve_diffusion(fn, nodes, node_map, boundary_nodes)
 
+    # Locate the target element
+    target_element = find_element(READING, nodes, node_map)
+
+    # Compute the concentration at the target point
+    target_element_concentration = c[node_map[target_element]]
+
+    # Interpolate the concentration at the target point
+    cg1 = LagrangeElement(ReferenceTriangle, 1)
+    J = np.einsum(
+        "ja,jb", nodes[node_map[target_element]], cg1.cell_jacobian, optimize=True
+    )
+    local_coords = np.linalg.solve(J, READING - nodes[node_map[target_element][0]])
+    target_nodes = cg1.tabulate([local_coords])[0]
+    target_concentration = np.dot(target_nodes, target_element_concentration)
+
+    print(f"Concentration at Reading: {target_concentration}")
+
+    # Plot the concentration over the mesh
     plt.tripcolor(nodes[:, 0], nodes[:, 1], node_map, c)
     plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
     plt.plot(*READING, "bo", label="Reading")
