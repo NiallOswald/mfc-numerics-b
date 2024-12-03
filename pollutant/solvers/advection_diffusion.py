@@ -1,13 +1,11 @@
 """Solve the advection-diffusion equation on the provided mesh."""
 
-from pollutant import (
-    LagrangeElement,
-    ReferenceTriangle,
-    ReferenceInterval,
-    gauss_quadrature,
-    load_mesh,
-    gaussian_source,
-)
+from pollutant.finite_elements import LagrangeElement
+from pollutant.reference_elements import ReferenceTriangle, ReferenceInterval
+from pollutant.quadrature import gauss_quadrature
+from pollutant.utils import load_mesh, gaussian_source
+from pollutant.constants import SOUTHAMPTON, READING, BURN_TIME
+
 from alive_progress import alive_it
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -161,13 +159,11 @@ def dt_advection_diffusion(
 
 
 if __name__ == "__main__":
-    source = np.array([450000, 175000])
-
     # Load the mesh
     nodes, node_map, boundary_nodes = load_mesh("esw", "12_5k")
 
     # Define the source term
-    S = gaussian_source(nodes, source, amplitude=1e-3, radius=10000.0, order=2.0)
+    S = gaussian_source(nodes, SOUTHAMPTON, amplitude=1e-3, radius=10000.0, order=2.0)
 
     u = np.zeros_like(nodes)
     u[:, 1] = 50
@@ -198,6 +194,8 @@ if __name__ == "__main__":
             node_map,
             sol.y[:, i],  # shading="gouraud"
         )
+        plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
+        plt.plot(*READING, "bo", label="Reading")
         plt.colorbar()
         plt.title(f"Time: {sol.t[i]:.2f}")
         plt.show()
