@@ -1,6 +1,12 @@
 """Solve the diffusion equation on the provided mesh."""
 
-from pollutant import LagrangeElement, ReferenceTriangle, gauss_quadrature, load_mesh
+from pollutant import (
+    LagrangeElement,
+    ReferenceTriangle,
+    gauss_quadrature,
+    load_mesh,
+    gaussian_source,
+)
 import numpy as np
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
@@ -58,14 +64,12 @@ def solve_diffusion(fn, mesh, node_map, boundaries):
 
 if __name__ == "__main__":
     source = np.array([450000, 175000])
-    extent = 10000
 
     # Load the mesh
     nodes, node_map, boundary_nodes = load_mesh("esw", "6_25k")
 
     # Define the source term
-    fn = np.zeros(len(nodes))
-    fn[np.linalg.norm(nodes - source, axis=1) < extent] = 1.0
+    fn = gaussian_source(nodes, source, amplitude=1e-7, radius=10000.0, order=2.0)
 
     # Solve the diffusion equation
     c = solve_diffusion(fn, nodes, node_map, boundary_nodes)

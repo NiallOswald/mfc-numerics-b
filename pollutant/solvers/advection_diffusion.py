@@ -6,6 +6,7 @@ from pollutant import (
     ReferenceInterval,
     gauss_quadrature,
     load_mesh,
+    gaussian_source,
 )
 from alive_progress import alive_it
 import numpy as np
@@ -149,14 +150,12 @@ def dt_advection_diffusion(
 
 if __name__ == "__main__":
     source = np.array([450000, 175000])
-    extent = 10000
 
     # Load the mesh
     nodes, node_map, boundary_nodes = load_mesh("esw", "12_5k")
 
     # Define the source term
-    S = np.zeros(len(nodes))
-    S[np.linalg.norm(nodes - source, axis=1) < extent] = 1e-3
+    S = gaussian_source(nodes, source, amplitude=1e-3, radius=10000.0, order=2.0)
 
     u = np.zeros_like(nodes)
     u[:, 1] = 50
