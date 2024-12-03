@@ -46,7 +46,7 @@ def K_loc(*e):
             grad_phi(),
             J_inv(*e),
         )
-        * abs(np.linalg.det(J(*e)))
+        * np.linalg.det(J(*e))
         / 2
     )
 
@@ -58,7 +58,7 @@ def f_loc(S, *e):
             [phi(xi) * S(global_map(xi, *e)) for xi in gauss_points],
             axis=0,
         )
-        * abs(np.linalg.det(J(*e)))
+        * np.linalg.det(J(*e))
         / 6
     )
 
