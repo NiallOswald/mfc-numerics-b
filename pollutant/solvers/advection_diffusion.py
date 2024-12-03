@@ -3,7 +3,7 @@
 from pollutant.finite_elements import LagrangeElement
 from pollutant.reference_elements import ReferenceTriangle, ReferenceInterval
 from pollutant.quadrature import gauss_quadrature
-from pollutant.utils import load_mesh, gaussian_source
+from pollutant.utils import load_mesh, find_element, gaussian_source
 from pollutant.constants import SOUTHAMPTON, READING, BURN_TIME
 
 from alive_progress import alive_it
@@ -185,6 +185,31 @@ if __name__ == "__main__":
         method="LSODA",
         max_step=1e2,
     )
+
+    # Locate the target element
+    target_element = find_element(READING, nodes, node_map)
+
+    # Compute the concentration at the target point
+    target_element_concentration = sol.y[node_map[target_element]]
+
+    # Interpolate the concentration at the target point
+    cg1 = LagrangeElement(ReferenceTriangle, 1)
+    J = np.einsum(
+        "ja,jb", nodes[node_map[target_element]], cg1.cell_jacobian, optimize=True
+    )
+    local_coords = np.linalg.solve(J, READING - nodes[node_map[target_element][0]])
+    target_nodes = cg1.tabulate([local_coords])[0]
+    target_concentration = np.einsum(
+        "a,at->t", target_nodes, target_element_concentration
+    )
+
+    # Plot the concentration at the target point
+    plt.plot(sol.t, target_concentration)
+    plt.plot([BURN_TIME, BURN_TIME], [0, target_concentration.max()], "r--")
+    plt.xlabel("Time")
+    plt.ylabel("Concentration")
+    plt.title("Concentration at Reading over time")
+    plt.show()
 
     # Plot the concentration over the mesh
     for i in range(0, len(sol.t), len(sol.t) // 10):
