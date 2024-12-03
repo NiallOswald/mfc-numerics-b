@@ -36,7 +36,7 @@ def dt_advection_diffusion(c, S, u, kappa, mesh, node_map, boundaries):
     for nodes in alive_it(node_map, title="Construcing stiffness matrix..."):
         J = np.einsum("ja,jb", mesh[nodes], fe.cell_jacobian, optimize=True)
         inv_J = np.linalg.inv(J)
-        det_J = abs(np.linalg.det(J))
+        det_J = np.linalg.det(J)
 
         M[np.ix_(nodes, nodes)] += (
             np.einsum(
