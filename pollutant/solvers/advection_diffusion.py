@@ -243,6 +243,31 @@ def eval_target_concentration(sol, nodes, node_map, target=READING):
     return target_concentration
 
 
+def compute_convergence(mesh, scales, func):
+    """Compute the convergence of the advection-diffusion equation."""
+    # Set global parameters
+    kappa = DIFFUSION_RATE
+    t_final = 2.0 * BURN_TIME
+
+    # Iterate over the scales
+    values = []
+    for scale in scales:
+        print(f"Running for {scale} on {mesh} mesh...")
+
+        # Solve the advection-diffusion equation
+        sol, nodes, node_map = solve_advection_diffusion(
+            t_final, kappa, mesh=mesh, scale=scale, max_step=1e3
+        )
+
+        # Compute the concentration at the target point
+        target_concentration = eval_target_concentration(sol, nodes, node_map)
+
+        # Store the value
+        values.append(func(sol.t, target_concentration))
+
+    return values
+
+
 if __name__ == "__main__":
     # Set global parameters
     kappa = DIFFUSION_RATE
@@ -277,3 +302,20 @@ if __name__ == "__main__":
         plt.colorbar()
         plt.title(f"Time: {sol.t[i]:.2f}")
         plt.show()
+
+    # Compute the convergence
+    eval_time = BURN_TIME
+    # mesh, scales_str = "esw", ["100k", "50k", "25k", "12_5k", "6_25k"]
+    mesh, scales_str = "las", ["40k", "20k", "10k", "5k", "2_5k", "1_25k"]
+    scales = [1e3 * float(s.replace("_", ".").replace("k", "")) for s in scales_str]
+
+    values = compute_convergence(
+        mesh, scales_str, lambda t, c: c[t.searchsorted(eval_time, "right")]
+    )
+    errors = np.abs(values - values[-1])
+
+    # Plot the convergence
+    plt.loglog(scales, errors, "o-")
+    plt.xlabel("Scale")
+    plt.ylabel("Concentration")
+    plt.show()
