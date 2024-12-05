@@ -29,6 +29,7 @@ def dt_advection_diffusion(
     boundaries,
     boundary_type="Robin",
     return_norms=False,
+    title="",
 ):
     """Compute the time-derivative for the advection-diffusion equation on a mesh."""
     # Get the quadrature points and weights
@@ -53,7 +54,7 @@ def dt_advection_diffusion(
     M = sp.lil_matrix((len(mesh), len(mesh)))
     K = sp.lil_matrix((len(mesh), len(mesh)))
     f = np.zeros(len(mesh))
-    for nodes in alive_it(node_map, title="Construcing stiffness matrix..."):
+    for nodes in alive_it(node_map, title=title + "Construcing stiffness matrix..."):
         J = np.einsum("ja,jb", mesh[nodes], fe.cell_jacobian, optimize=True)
         inv_J = np.linalg.inv(J)
         det_J = np.linalg.det(J)
@@ -178,8 +179,8 @@ def solve_advection_diffusion(
     # Load the mesh
     nodes, node_map, boundary_nodes = load_mesh(mesh, scale)
 
-    # Define the source term
-    S = gaussian_source(nodes, source, amplitude=1e-3, radius=10000.0, order=2.0)
+    # Set the parameters
+    S = np.zeros(len(nodes))
 
     u = np.zeros_like(nodes)
     u[:, 1] = WIND_SPEED
@@ -187,12 +188,30 @@ def solve_advection_diffusion(
     args = (S, u, kappa, nodes, node_map, boundary_nodes)
 
     # Cache the time derivatives
-    c_dt = dt_advection_diffusion("optimize", *args)
+    coarse_times = np.linspace(0, BURN_TIME, 20)
+    amplitudes = 1e-4 * gaussian_source(
+        coarse_times[:, np.newaxis], BURN_TIME / 2.0, radius=BURN_TIME / 2.0
+    )
+
+    print("Caching time derivatives...")
+    c_dts = []
+    for i, (t, amplitude) in enumerate(zip(coarse_times, amplitudes)):
+        S[:] = gaussian_source(
+            nodes,
+            source,
+            amplitude=amplitude,
+            radius=10000.0,
+        )
+        c_dts.append(
+            dt_advection_diffusion(
+                "optimize", *args, title=f"({i + 1} of {len(coarse_times)}) "
+            )
+        )
 
     # Solve the advection-diffusion equation
     c = np.zeros(len(nodes))
     sol = solve_ivp(
-        lambda t, x: c_dt(x),
+        lambda t, x: c_dts[coarse_times.searchsorted(t, "right") - 1](x),
         (0, t_final),
         c,
         method="LSODA",
