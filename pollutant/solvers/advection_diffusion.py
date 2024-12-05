@@ -4,7 +4,13 @@ from pollutant.finite_elements import LagrangeElement
 from pollutant.reference_elements import ReferenceTriangle, ReferenceInterval
 from pollutant.quadrature import gauss_quadrature
 from pollutant.utils import load_mesh, find_element, gaussian_source
-from pollutant.constants import SOUTHAMPTON, READING, BURN_TIME
+from pollutant.constants import (
+    SOUTHAMPTON,
+    READING,
+    BURN_TIME,
+    WIND_SPEED,
+    DIFFUSION_RATE,
+)
 
 from alive_progress import alive_it
 import numpy as np
@@ -159,6 +165,10 @@ def dt_advection_diffusion(
 
 
 if __name__ == "__main__":
+    # Set global parameters
+    kappa = DIFFUSION_RATE
+    t_final = 2 * BURN_TIME
+
     # Load the mesh
     nodes, node_map, boundary_nodes = load_mesh("esw", "12_5k")
 
@@ -166,10 +176,7 @@ if __name__ == "__main__":
     S = gaussian_source(nodes, SOUTHAMPTON, amplitude=1e-3, radius=10000.0, order=2.0)
 
     u = np.zeros_like(nodes)
-    u[:, 1] = 50
-    kappa = 1e2
-
-    t_final = 1200
+    u[:, 1] = WIND_SPEED
 
     args = (S, u, kappa, nodes, node_map, boundary_nodes)
 
