@@ -153,9 +153,12 @@ def dt_advection_diffusion(
     M = sp.csr_matrix(M)
     K = sp.csr_matrix(K)
 
-    if c == "optimize":
-        c_dt = lambda c: sp.linalg.spsolve(M, f - K @ c)
-    else:
+    try:
+        if c == "optimize":
+            c_dt = lambda c: sp.linalg.spsolve(M, f - K @ c)
+        else:
+            c_dt = sp.linalg.spsolve(M, f - K @ c)
+    except ValueError:
         c_dt = sp.linalg.spsolve(M, f - K @ c)
 
     if return_norms:
