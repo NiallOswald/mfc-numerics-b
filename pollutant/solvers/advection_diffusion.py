@@ -167,16 +167,19 @@ def dt_advection_diffusion(
         return c_dt
 
 
-if __name__ == "__main__":
-    # Set global parameters
-    kappa = DIFFUSION_RATE
-    t_final = 2 * BURN_TIME
-
+def solve_advection_diffusion(
+    t_final,
+    kappa,
+    source=SOUTHAMPTON,
+    mesh="esw",
+    scale="25k",
+    max_step=1.0,
+):
     # Load the mesh
-    nodes, node_map, boundary_nodes = load_mesh("esw", "12_5k")
+    nodes, node_map, boundary_nodes = load_mesh(mesh, scale)
 
     # Define the source term
-    S = gaussian_source(nodes, SOUTHAMPTON, amplitude=1e-3, radius=10000.0, order=2.0)
+    S = gaussian_source(nodes, source, amplitude=1e-3, radius=10000.0, order=2.0)
 
     u = np.zeros_like(nodes)
     u[:, 1] = WIND_SPEED
@@ -184,7 +187,7 @@ if __name__ == "__main__":
     args = (S, u, kappa, nodes, node_map, boundary_nodes)
 
     # Cache the time derivatives
-    c_dt, norms = dt_advection_diffusion("optimize", *args, return_norms=True)
+    c_dt = dt_advection_diffusion("optimize", *args)
 
     # Solve the advection-diffusion equation
     c = np.zeros(len(nodes))
@@ -193,11 +196,16 @@ if __name__ == "__main__":
         (0, t_final),
         c,
         method="LSODA",
-        max_step=1e2,
+        max_step=max_step,
     )
 
+    return sol, nodes, node_map
+
+
+def eval_target_concentration(sol, nodes, node_map, target=READING):
+    """Evaluate the concentration at the target point."""
     # Locate the target element
-    target_element = find_element(READING, nodes, node_map)
+    target_element = find_element(target, nodes, node_map)
 
     # Compute the concentration at the target point
     target_element_concentration = sol.y[node_map[target_element]]
@@ -207,11 +215,27 @@ if __name__ == "__main__":
     J = np.einsum(
         "ja,jb", nodes[node_map[target_element]], cg1.cell_jacobian, optimize=True
     )
-    local_coords = np.linalg.solve(J, READING - nodes[node_map[target_element][0]])
+    local_coords = np.linalg.solve(J, target - nodes[node_map[target_element][0]])
     target_nodes = cg1.tabulate([local_coords])[0]
     target_concentration = np.einsum(
         "a,at->t", target_nodes, target_element_concentration
     )
+
+    return target_concentration
+
+
+if __name__ == "__main__":
+    # Set global parameters
+    kappa = DIFFUSION_RATE
+    t_final = 2 * BURN_TIME
+
+    # Solve the advection-diffusion equation
+    sol, nodes, node_map = solve_advection_diffusion(
+        t_final, kappa, mesh="las", scale="10k", max_step=1e3
+    )
+
+    # Compute the concentration at the target point
+    target_concentration = eval_target_concentration(sol, nodes, node_map)
 
     # Plot the concentration at the target point
     plt.plot(sol.t, target_concentration)
