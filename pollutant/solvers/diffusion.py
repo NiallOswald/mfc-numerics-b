@@ -11,7 +11,7 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
 
-def solve_diffusion(fn, mesh, node_map, boundaries):
+def solve_diffusion(S, mesh, node_map, boundaries):
     """Solve the diffusion equation on a mesh."""
     # Get the quadrature points and weights
     points, weights = gauss_quadrature(ReferenceTriangle, 2)
@@ -45,7 +45,7 @@ def solve_diffusion(fn, mesh, node_map, boundaries):
         )
 
         f[nodes] += (
-            np.einsum("qi,k,qk,q->i", phi, fn[nodes], phi, weights, optimize=True)
+            np.einsum("qi,k,qk,q->i", phi, S[nodes], phi, weights, optimize=True)
             * det_J
         )
 
@@ -66,10 +66,10 @@ if __name__ == "__main__":
     nodes, node_map, boundary_nodes = load_mesh("esw", "6_25k")
 
     # Define the source term
-    fn = gaussian_source(nodes, SOUTHAMPTON, amplitude=1e-7, radius=10000.0, order=2.0)
+    S = gaussian_source(nodes, SOUTHAMPTON, amplitude=1e-7, radius=10000.0, order=2.0)
 
     # Solve the diffusion equation
-    c = solve_diffusion(fn, nodes, node_map, boundary_nodes)
+    c = solve_diffusion(S, nodes, node_map, boundary_nodes)
 
     # Locate the target element
     target_element = find_element(READING, nodes, node_map)
