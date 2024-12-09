@@ -7,7 +7,9 @@ from pathlib import Path
 
 YEAR = "2005"
 PATTERN = f"**/qc-version-1/*{YEAR}.csv"
-HEADER = 80  # Metadata rows to skip
+META_PATTERN = "**/*station-metadata.csv"
+DATA_HEADER = 80  # Metadata rows to skip
+META_HEADER = 48
 
 
 def knots_to_mps(knots):
@@ -18,7 +20,7 @@ def knots_to_mps(knots):
 knots_to_mps = np.vectorize(knots_to_mps)
 
 
-def post_process(df):
+def proc_windspeed(df):
     """Convert wind speed and direction to horizontal and vertical components."""
     df["mean_wind_speed"] = knots_to_mps(df["mean_wind_speed"])
     df["mean_wind_dir"] = np.radians(df["mean_wind_dir"])
@@ -26,6 +28,33 @@ def post_process(df):
     df["vertical_wind_speed"] = df["mean_wind_speed"] * np.cos(df["mean_wind_dir"])
 
     df.drop(columns=["mean_wind_dir", "mean_wind_speed"], inplace=True)
+
+
+def proc_lat_lon(df, path):
+    """Add the latitude and longitude of the weather stations."""
+    meta_path = path.glob(META_PATTERN)
+
+    with open(list(meta_path)[0], "r") as csvfile:
+        meta_df = pd.read_csv(csvfile, header=META_HEADER)
+
+    meta_df = meta_df.iloc[:-1]  # Drop the last row
+    meta_df["src_id"] = meta_df["src_id"].astype(int)
+
+    df = df.merge(
+        meta_df[["src_id", "station_latitude", "station_longitude"]],
+        on="src_id",
+        how="left",
+    )
+
+    return df[
+        [
+            "ob_end_time",
+            "station_latitude",
+            "station_longitude",
+            "horizontal_wind_speed",
+            "vertical_wind_speed",
+        ]
+    ]
 
 
 def process_weather_data():
@@ -59,17 +88,32 @@ def process_weather_data():
     dataframes = []
     for path in alive_it(pathlist, title="Searching for files..."):
         with open(path, "r") as csvfile:
-            df = pd.read_csv(csvfile, header=HEADER, index_col=0)
+            df = pd.read_csv(
+                csvfile,
+                header=DATA_HEADER,
+                index_col=0,
+            )
             df = df[start:end]
 
             dataframes.append(df)
 
     df = pd.concat(dataframes)
-    df.reset_index(inplace=True)
-    df = df[
-        ["ob_end_time", "src_id", "mean_wind_dir", "mean_wind_speed"]
-    ]  # Drop unnecessary columns
 
-    post_process(df)
+    # Post processing
+    df.reset_index(inplace=True)
+    df["src_id"] = df["src_id"].astype(int)
+
+    df = df[
+        [
+            "ob_end_time",
+            "src_id",
+            "mean_wind_dir",
+            "mean_wind_speed",
+        ]
+    ]
+    df.dropna(inplace=True)
+
+    proc_windspeed(df)
+    df = proc_lat_lon(df, Path(args.path))
 
     df.to_csv(output)
