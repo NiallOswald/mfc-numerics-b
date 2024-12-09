@@ -19,3 +19,11 @@ dependencies = [
     "scipy",
     "pytest",
 ]
+
+[project.scripts]
+process_weather_data = "pollutant.scripts.process_weather_data:process_weather_data"
+
+[project.optional-dependencies]
+data = [
+    "pandas",
+]
