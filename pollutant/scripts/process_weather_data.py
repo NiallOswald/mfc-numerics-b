@@ -24,6 +24,7 @@ def proc_windspeed(df):
     """Convert wind speed and direction to horizontal and vertical components."""
     df["mean_wind_speed"] = knots_to_mps(df["mean_wind_speed"])
     df["mean_wind_dir"] = np.radians(df["mean_wind_dir"])
+
     df["horizontal_wind_speed"] = df["mean_wind_speed"] * np.sin(df["mean_wind_dir"])
     df["vertical_wind_speed"] = df["mean_wind_speed"] * np.cos(df["mean_wind_dir"])
 
@@ -46,15 +47,7 @@ def proc_lat_lon(df, path):
         how="left",
     )
 
-    return df[
-        [
-            "ob_end_time",
-            "station_latitude",
-            "station_longitude",
-            "horizontal_wind_speed",
-            "vertical_wind_speed",
-        ]
-    ]
+    return df
 
 
 def process_weather_data():
@@ -99,21 +92,31 @@ def process_weather_data():
 
     df = pd.concat(dataframes)
 
-    # Post processing
+    # Add a new index
     df.reset_index(inplace=True)
     df["src_id"] = df["src_id"].astype(int)
 
-    df = df[
-        [
-            "ob_end_time",
-            "src_id",
-            "mean_wind_dir",
-            "mean_wind_speed",
-        ]
-    ]
-    df.dropna(inplace=True)
+    # Filter stations with missing data
+    filter_na = df.groupby("src_id")[["mean_wind_dir", "mean_wind_speed"]].transform(
+        lambda x: x.isna().any()
+    )
 
+    df = df[~(filter_na["mean_wind_dir"] | filter_na["mean_wind_speed"])]
+
+    # Post-processing
     proc_windspeed(df)
     df = proc_lat_lon(df, Path(args.path))
 
+    # Include only the necessary columns
+    df = df[
+        [
+            "ob_end_time",
+            "station_latitude",
+            "station_longitude",
+            "horizontal_wind_speed",
+            "vertical_wind_speed",
+        ]
+    ]
+
+    # Save to csv
     df.to_csv(output)
