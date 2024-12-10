@@ -3,6 +3,8 @@
 import numpy as np
 from scipy.optimize import linprog
 
+np.seterr(invalid="ignore", divide="ignore")
+
 
 def load_mesh(name: str, scale: str):
     """Load the mesh from a file."""
