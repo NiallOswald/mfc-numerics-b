@@ -23,7 +23,9 @@ knots_to_mps = np.vectorize(knots_to_mps)
 def proc_windspeed(df):
     """Convert wind speed and direction to horizontal and vertical components."""
     df["mean_wind_speed"] = knots_to_mps(df["mean_wind_speed"])
-    df["mean_wind_dir"] = np.radians(df["mean_wind_dir"])
+    df["mean_wind_dir"] = (
+        np.radians(df["mean_wind_dir"]) + np.pi
+    )  # Convert direction to heading
 
     df["horizontal_wind_speed"] = df["mean_wind_speed"] * np.sin(df["mean_wind_dir"])
     df["vertical_wind_speed"] = df["mean_wind_speed"] * np.cos(df["mean_wind_dir"])
