@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.optimize import linprog
 
-np.seterr(invalid="ignore", divide="ignore")
+np.seterr(invalid="ignore", divide="ignore", over="ignore")
 
 
 def load_mesh(name: str, scale: str):
