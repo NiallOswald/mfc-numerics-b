@@ -33,7 +33,7 @@ fi
 
 # Download the data
 echo "Downloading data to $output_path. This may take a while..."
-sleep 2
+sleep 5
 
 wget -e robots=off --mirror --no-parent -r https://dap.ceda.ac.uk/badc/ukmo-midas-open/data/uk-mean-wind-obs/dataset-version-202407/ --header "Authorization: Bearer $api_key" -P $output_path
 
@@ -44,6 +44,7 @@ echo "Processing the data..."
 
 process_weather_data $output_path --output $output_path/"wind_data.csv"
 transform_station_data $output_path/"wind_data.csv"
+interpolate_at_nodes $output_path/"wind_data.csv" --all
 
 echo "Processing complete."
 
@@ -51,5 +52,6 @@ echo "Processing complete."
 echo "Cleaning up..."
 
 rm -rf $output_path/"dap.ceda.ac.uk/"
+rm $output_path/"wind_data.csv"
 
 echo "Done.
