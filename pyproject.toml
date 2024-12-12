@@ -21,6 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
+interpolate_at_nodes = "pollutant.scripts.interpolate_at_nodes:interpolate_at_nodes"
 plot_weather_stations = "pollutant.scripts.plot_weather_stations:plot_weather_stations"
 process_weather_data = "pollutant.scripts.process_weather_data:process_weather_data"
 transform_station_data = "pollutant.scripts.transform_station_data:transform_station_data"
