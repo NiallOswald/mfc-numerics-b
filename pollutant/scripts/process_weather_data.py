@@ -119,4 +119,4 @@ def process_weather_data():
     ]
 
     # Save to csv
-    df.to_csv(output)
+    df.to_csv(output, index=False)

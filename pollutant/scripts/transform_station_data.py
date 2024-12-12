@@ -26,4 +26,4 @@ def transform_station_data():
     )
     df = df.drop(columns=["station_latitude", "station_longitude"])
 
-    df.to_csv(path)
+    df.to_csv(path, index=False)
