@@ -6,15 +6,20 @@ from scipy.optimize import linprog
 np.seterr(invalid="ignore", divide="ignore", over="ignore")
 
 
-def load_mesh(name: str, scale: str):
+def load_mesh(name: str, scale: str, path: str = "mesh/"):
     """Load the mesh from a file."""
-    nodes = np.loadtxt(f"mesh/{name}_grids/{name}_nodes_{scale}.txt")
-    node_map = np.loadtxt(f"mesh/{name}_grids/{name}_IEN_{scale}.txt", dtype=np.int64)
+    nodes = np.loadtxt(f"{path}{name}_grids/{name}_nodes_{scale}.txt")
+    node_map = np.loadtxt(f"{path}{name}_grids/{name}_IEN_{scale}.txt", dtype=np.int64)
     boundary_nodes = np.loadtxt(
-        f"mesh/{name}_grids/{name}_bdry_{scale}.txt", dtype=np.int64
+        f"{path}{name}_grids/{name}_bdry_{scale}.txt", dtype=np.int64
     )
 
     return nodes, node_map, boundary_nodes
+
+
+def load_weather_data(name: str, scale: str, path: str = "data/"):
+    """Load the weather data from a file."""
+    return np.loadtxt(f"{path}wind_data_{name}_{scale}.csv", delimiter=",", skiprows=1)
 
 
 def gaussian_source(x, x0, amplitude=1.0, radius=1.0, order=2.0):
