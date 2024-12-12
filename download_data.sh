@@ -1,8 +1,8 @@
-#!/bin/bash
+#! /bin/bash
 
 helpFunction()
 {
-   echo ""
+   echo "Download data from CEDA and process it."
    echo "Usage: $0 -k api_key -p path"
    echo -e "\t-api_key API key for CEDA."
    echo -e "\t-p Path to download the data to."
@@ -38,3 +38,18 @@ sleep 2
 wget -e robots=off --mirror --no-parent -r https://dap.ceda.ac.uk/badc/ukmo-midas-open/data/uk-mean-wind-obs/dataset-version-202407/ --header "Authorization: Bearer $api_key" -P $output_path
 
 echo "Download complete"
+
+# Process the data
+echo "Processing the data..."
+
+process_weather_data $output_path --output $output_path/"wind_data.csv"
+transform_station_data $output_path/"wind_data.csv"
+
+echo "Processing complete."
+
+# Clean up
+echo "Cleaning up..."
+
+rm -rf $output_path/"dap.ceda.ac.uk/"
+
+echo "Done.
