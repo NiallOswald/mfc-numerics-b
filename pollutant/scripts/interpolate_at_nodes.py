@@ -2,6 +2,7 @@
 
 from pollutant.utils import load_mesh
 from argparse import ArgumentParser
+import os
 import pandas as pd
 from pathlib import Path
 from scipy.interpolate import griddata
@@ -15,36 +16,47 @@ SCALES = {
 
 def interpolate_on_mesh(mesh, scale, path):
     """Interpolate the weather data at the nodes of the mesh."""
+    # Load mesh
     try:
         nodes, _, _ = load_mesh(mesh, scale)
     except FileNotFoundError:
         print(f"Mesh {mesh} with scale {scale} not found. Skipping.")
         return
 
+    # Create directory for the interpolated data
+    if not os.path.exists(path.parent / f"{mesh}_{scale}"):
+        os.makedirs(path.parent / f"{mesh}_{scale}")
+
     df = pd.read_csv(path)
+    time_groups = df.groupby("ob_end_time")
 
-    # Interpolate the weather data at the nodes
-    u_velocity = griddata(
-        (df["station_x"], df["station_y"]),
-        df["horizontal_wind_speed"],
-        (nodes[:, 0], nodes[:, 1]),
-        method="linear",
-        fill_value=0.0,
-    )
-    v_velocity = griddata(
-        (df["station_x"], df["station_y"]),
-        df["vertical_wind_speed"],
-        (nodes[:, 0], nodes[:, 1]),
-        method="linear",
-        fill_value=0.0,
-    )
+    # Iterate over time values
+    for datetime, group in time_groups:
+        # Interpolate the weather data at the nodes
+        u_velocity = griddata(
+            (group["station_x"], group["station_y"]),
+            group["horizontal_wind_speed"],
+            (nodes[:, 0], nodes[:, 1]),
+            method="linear",
+            fill_value=0.0,
+        )
+        v_velocity = griddata(
+            (group["station_x"], group["station_y"]),
+            group["vertical_wind_speed"],
+            (nodes[:, 0], nodes[:, 1]),
+            method="linear",
+            fill_value=0.0,
+        )
 
-    interpolated_data = pd.DataFrame(
-        {"u_velocity": u_velocity, "v_velocity": v_velocity}
-    )
-    interpolated_data.to_csv(
-        path.with_name(path.stem + f"_{mesh}_{scale}.csv"), index=False
-    )
+        interpolated_data = pd.DataFrame(
+            {"u_velocity": u_velocity, "v_velocity": v_velocity}
+        )
+
+        datetime_str = datetime.replace(" ", "_").replace(":", "_")
+
+        interpolated_data.to_csv(
+            path.parent / f"{mesh}_{scale}/{datetime_str}.csv", index=False
+        )
 
 
 def interpolate_at_nodes():
