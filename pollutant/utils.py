@@ -1,25 +1,51 @@
 """Utilities for the finite element method."""
 
+from pollutant.constants import FIRE_START
+from datetime import datetime
+from pathlib import Path
+from PIL import Image
 import numpy as np
 from scipy.optimize import linprog
 
 np.seterr(invalid="ignore", divide="ignore", over="ignore")
 
 
-def load_mesh(name: str, scale: str, path: str = "mesh/"):
+def load_mesh(name: str, scale: str, path: Path = Path("mesh")):
     """Load the mesh from a file."""
-    nodes = np.loadtxt(f"{path}{name}_grids/{name}_nodes_{scale}.txt")
-    node_map = np.loadtxt(f"{path}{name}_grids/{name}_IEN_{scale}.txt", dtype=np.int64)
+    nodes = np.loadtxt(path / f"{name}_grids/{name}_nodes_{scale}.txt")
+    node_map = np.loadtxt(path / f"{name}_grids/{name}_IEN_{scale}.txt", dtype=np.int64)
     boundary_nodes = np.loadtxt(
-        f"{path}{name}_grids/{name}_bdry_{scale}.txt", dtype=np.int64
+        path / f"{name}_grids/{name}_bdry_{scale}.txt", dtype=np.int64
     )
 
     return nodes, node_map, boundary_nodes
 
 
-def load_weather_data(name: str, scale: str, path: str = "data/"):
+def load_weather_data(
+    name: str, scale: str, path: Path = Path("data"), init_time: datetime = FIRE_START
+):
     """Load the weather data from a file."""
-    return np.loadtxt(f"{path}wind_data_{name}_{scale}.csv", delimiter=",", skiprows=1)
+    wind_data = dict()
+    file_paths = path.glob(f"{name}_{scale}/*.csv")
+    for data_path in file_paths:
+        time = datetime.strptime(Path(data_path).stem, "%Y-%m-%d_%H_%M_%S")
+        time_in_seconds = (time - init_time).total_seconds()
+        wind_data[time_in_seconds] = np.loadtxt(data_path, delimiter=",", skiprows=1)
+
+    return wind_data
+
+
+def save_gif(in_dir: Path, out_path: Path = Path("animation.gif"), **kwargs):
+    """Create a gif from the images in a directory."""
+    frames = [Image.open(image) for image in sorted(in_dir.glob("*.jpg"))]
+    frame_one = frames[0]
+    frame_one.save(
+        out_path,
+        format="GIF",
+        append_images=frames,
+        save_all=True,
+        **kwargs,
+    )
 
 
 def gaussian_source(x, x0, amplitude=1.0, radius=1.0, order=2.0):

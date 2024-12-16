@@ -1,269 +1,349 @@
 """Solve the advection-diffusion equation on the provided mesh."""
 
 from pollutant.finite_elements import LagrangeElement
-from pollutant.reference_elements import ReferenceTriangle, ReferenceInterval
+from pollutant.reference_elements import ReferenceTriangle
 from pollutant.quadrature import gauss_quadrature
-from pollutant.utils import load_mesh, find_element, gaussian_source
+import pollutant.utils as utils
 from pollutant.constants import (
     SOUTHAMPTON,
     READING,
     BURN_TIME,
-    WIND_SPEED,
+    DEFAULT_WIND_SPEED,
     DIFFUSION_RATE,
 )
 
-from alive_progress import alive_it
+from alive_progress import alive_it, alive_bar
 import numpy as np
 from scipy.integrate import solve_ivp
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
+import os
+from pathlib import Path
+
+VECTORIZED = {
+    "RK45": False,
+    "RK23": False,
+    "Radau": False,
+    "BDF": True,
+    "LSODA": False,
+}
+CALL_ESTIMATES = {
+    "RK45": 5,
+    "RK23": 3,
+    "Radau": 5,
+    "BDF": 1,
+    "LSODA": 5,
+}
+
+METHOD = "RK23"
 
 
-def dt_advection_diffusion(
-    c,
-    S,
-    u,
-    kappa,
-    mesh,
-    node_map,
-    boundaries,
-    boundary_type="Robin",
-    return_norms=False,
-    title="",
-):
-    """Compute the time-derivative for the advection-diffusion equation on a mesh."""
-    # Get the quadrature points and weights
-    points, weights = gauss_quadrature(ReferenceTriangle, 2)
-    points_1d, weights_1d = gauss_quadrature(ReferenceInterval, 2)
+class AdvectionDiffusion:
+    def __init__(
+        self,
+        kappa,
+        mesh,
+        scale,
+        boundary_type="Robin",
+        data_path=Path("data"),
+    ):
+        self.kappa = kappa
+        self.mesh = mesh
+        self.scale = scale
+        self.boundary_type = boundary_type
+        self.data_path = data_path
 
-    # Define the finite element
-    fe = LagrangeElement(ReferenceTriangle, 1)
-    fe_1d = LagrangeElement(ReferenceInterval, 1)
+        self.nodes, self.node_map, self.boundary_nodes = utils.load_mesh(mesh, scale)
+        self.node_count = len(self.nodes)
 
-    # Tabulate the shape functions and their gradients
-    phi = fe.tabulate(points)
-    grad_phi = fe.tabulate(points, grad=True)
-
-    phi_1d = fe_1d.tabulate(points_1d)
-
-    # Setup empty list for the boundary normal vectors
-    if return_norms:
-        norms = []
-
-    # Compute the global mass and stiffness matrix
-    M = sp.lil_matrix((len(mesh), len(mesh)))
-    K = sp.lil_matrix((len(mesh), len(mesh)))
-    f = np.zeros(len(mesh))
-    for nodes in alive_it(node_map, title=title + "Construcing stiffness matrix..."):
-        J = np.einsum("ja,jb", mesh[nodes], fe.cell_jacobian, optimize=True)
-        inv_J = np.linalg.inv(J)
-        det_J = np.linalg.det(J)
-
-        M[np.ix_(nodes, nodes)] += (
-            np.einsum(
-                "qa,qb,q->ab",
-                phi,
-                phi,
-                weights,
-                optimize=True,
-            )
-        ) * det_J
-
-        K[np.ix_(nodes, nodes)] += (
-            -np.einsum(
-                "qa,qci,ij,cj,qb,q->ab",
-                phi,
-                grad_phi,
-                inv_J,
-                u[nodes],
-                phi,
-                weights,
-                optimize=True,
-            )
-            - np.einsum(
-                "qai,ij,cj,qc,qb,q->ab",
-                grad_phi,
-                inv_J,
-                u[nodes],
-                phi,
-                phi,
-                weights,
-                optimize=True,
-            )
-            + np.einsum(
-                "qai,ik,qbj,jk,q->ab",
-                grad_phi,
-                inv_J,
-                grad_phi,
-                inv_J,
-                weights,
-                optimize=True,
-            )
-            * kappa
-        ) * det_J
-
-        f[nodes] += (
-            np.einsum("qa,qb,b,q->a", phi, phi, S[nodes], weights, optimize=True)
-            * det_J
+        self.S = utils.gaussian_source(
+            self.nodes, SOUTHAMPTON, radius=10000.0, order=2.0
         )
 
-        if boundary_type == "Robin":
-            continue
+        self._cache_assembly()
 
-        edges = np.column_stack([nodes, np.roll(nodes, -1)])
-        for edge_index, edge in enumerate(edges):
-            if not np.isin(edge, boundaries).all():
-                continue
+    def amplitude(self, t):
+        return 1e-2 * utils.gaussian_source_simple(
+            t, BURN_TIME / 2.0, radius=BURN_TIME / 2.0
+        )
 
-            reference_normal = ReferenceTriangle.cell_normals[edge_index]
+    def load_weather_data(self):
+        """Load the weather data."""
+        try:
+            u_data = utils.load_weather_data(self.mesh, self.scale, self.data_path)
 
-            J_1d = np.einsum("ja,jb", mesh[edge], fe_1d.cell_jacobian).T[0]
-            det_J_1d = np.linalg.norm(J_1d)
+        except FileNotFoundError:
+            print("No weather data found. Using constant default wind speed.")
+            u = np.zeros_like(self.nodes)
+            u[:, :] = DEFAULT_WIND_SPEED
+            u_data = {np.inf: u}
 
-            normal = np.einsum(
-                "ab,b->a",
-                inv_J.T,
-                reference_normal,
-            )
-            normal /= np.linalg.norm(normal)
+        return u_data
 
-            if return_norms:
-                norms.append([mesh[edge], normal])
+    def _cache_assembly(self):
+        """Cache the stiffness and mass matrices."""
+        print("Caching stiffness and mass matrices...")
+        u_data = self.load_weather_data()
+        self.t_data = np.sort(np.array(list(u_data.keys())))
+        self.matrix_data = [
+            self._assemble(self.S, u_data[t], title=f"({i + 1} / {len(self.t_data)}) ")
+            for i, t in enumerate(self.t_data)
+        ]
 
-            if boundary_type == "Dirichlet":
-                raise NotImplementedError(
-                    "Dirichlet boundary conditions not implemented"
+        # Sort the data
+        self.matrix_ = np.argsort(self.t_data)
+
+    def _assemble(self, S, u, title=""):
+        """Assemble the mass and stiffness matrices."""
+        # Get the quadrature points and weights
+        points, weights = gauss_quadrature(ReferenceTriangle, 2)
+
+        # Define the finite element
+        fe = LagrangeElement(ReferenceTriangle, 1)
+
+        # Tabulate the shape functions and their gradients
+        phi = fe.tabulate(points)
+        grad_phi = fe.tabulate(points, grad=True)
+
+        # Compute the global mass and stiffness matrix
+        M = sp.lil_matrix((self.node_count, self.node_count))
+        K = sp.lil_matrix((self.node_count, self.node_count))
+        f = np.zeros(self.node_count)
+        for e in alive_it(
+            self.node_map, title=title + "Construcing stiffness matrix..."
+        ):
+            J = np.einsum("ja,jb", self.nodes[e], fe.cell_jacobian, optimize=True)
+            inv_J = np.linalg.inv(J)
+            det_J = abs(np.linalg.det(J))
+
+            M[np.ix_(e, e)] += (
+                np.einsum(
+                    "qa,qb,q->ab",
+                    phi,
+                    phi,
+                    weights,
+                    optimize=True,
                 )
+            ) * det_J
 
-            elif boundary_type == "Neumann":
-                K[np.ix_(edge, edge)] = (
+            if self.boundary_type == "Robin":
+                K[np.ix_(e, e)] += (
+                    -np.einsum(
+                        "qc,cj,qai,ij,qb,q->ab",
+                        phi,
+                        u[e],
+                        grad_phi,
+                        inv_J,
+                        phi,
+                        weights,
+                        optimize=True,
+                    )  # -(u . grad(phi)) * c
+                    + np.einsum(
+                        "qai,ik,qbj,jk,q->ab",
+                        grad_phi,
+                        inv_J,
+                        grad_phi,
+                        inv_J,
+                        weights,
+                        optimize=True,
+                    )  # grad(phi) . grad(c)
+                    * self.kappa
+                ) * det_J
+
+            elif self.boundary_type == "Neumann":
+                K[np.ix_(e, e)] += (
                     np.einsum(
-                        "qa,qb,qc,ck,k,q->ab",
-                        phi_1d,
-                        phi_1d,
-                        phi_1d,
-                        u[edge],
-                        normal,
-                        weights_1d,
-                    )
-                ) * det_J_1d
-            else:
-                raise ValueError("Invalid boundary type")
+                        "qa,qb,ci,qcj,ji,q->ab",
+                        phi,
+                        phi,
+                        u[e],
+                        grad_phi,
+                        inv_J,
+                        weights,
+                        optimize=True,
+                    )  # phi * c * div(u)
+                    + np.einsum(
+                        "qa,qc,ci,qbj,ji,q->ab",
+                        phi,
+                        phi,
+                        u[e],
+                        grad_phi,
+                        inv_J,
+                        weights,
+                        optimize=True,
+                    )  # phi * (u . grad(c))
+                    + np.einsum(
+                        "qai,ik,qbj,jk,q->ab",
+                        grad_phi,
+                        inv_J,
+                        grad_phi,
+                        inv_J,
+                        weights,
+                        optimize=True,
+                    )  # grad(phi) . grad(c)
+                    * self.kappa
+                ) * det_J
 
-    # Solve the system
-    M = sp.csr_matrix(M)
-    K = sp.csr_matrix(K)
+            f[e] += (
+                np.einsum("qa,qb,b,q->a", phi, phi, S[e], weights, optimize=True)
+                * det_J
+            )  # phi * S
 
-    try:
-        if c == "optimize":
-            c_dt = lambda c: sp.linalg.spsolve(M, f - K @ c)
+        if self.boundary_type == "Dirichlet":
+            M[self.boundary_nodes, :] = 0.0
+            M[self.boundary_nodes, self.boundary_nodes] = 1.0
+            K[self.boundary_nodes, :] = 0.0
+            f[self.boundary_nodes] = 0.0
+
+        # Solve the system
+        M = sp.csr_matrix(M)
+        K = sp.csr_matrix(K)
+
+        return M, K, f
+
+    def assemble(self, t):
+        M, K, f = self.matrix_data[self.t_data.searchsorted(t, "right") - 1]
+        return M, K, self.amplitude(t) * f
+
+    def _step(self, t, c):
+        M, K, f = self.assemble(t)
+        return sp.linalg.spsolve(M, f - K @ c)
+
+    def _step_vectorized(self, t, c):
+        M, K, f = self.assemble(t)
+        b_mat = np.zeros(2 * [M.shape[0]])
+        b_mat[:, : c.shape[1]] = c
+
+        c_dt_mat = sp.linalg.spsolve(M, f - K @ b_mat)
+
+        return c_dt_mat[:, : c.shape[1]]
+
+    def step(self, t, c, vectorized=False, bar=lambda: None):
+        """Compute the time-derivative."""
+        bar()  # Update the progress bar
+
+        if vectorized:
+            return self._step_vectorized(t, c)
         else:
-            c_dt = sp.linalg.spsolve(M, f - K @ c)
-    except ValueError:
-        c_dt = sp.linalg.spsolve(M, f - K @ c)
+            return self._step(t, c)
 
-    if return_norms:
-        return c_dt, norms
-    else:
-        return c_dt
+    def solve(self, t_final, max_step, t_eval=None, method="RK23", bar_length=None):
+        """Solve the advection-diffusion equation."""
+        if bar_length is None:
+            bar_length = CALL_ESTIMATES[method] * int(t_final / max_step)
 
-
-def solve_advection_diffusion(
-    t_final,
-    kappa,
-    source=SOUTHAMPTON,
-    mesh="esw",
-    scale="25k",
-    max_step=1.0,
-):
-    # Load the mesh
-    nodes, node_map, boundary_nodes = load_mesh(mesh, scale)
-
-    # Set the parameters
-    S = np.zeros(len(nodes))
-
-    u = np.zeros_like(nodes)
-    u[:, 1] = WIND_SPEED
-
-    args = (S, u, kappa, nodes, node_map, boundary_nodes)
-
-    # Cache the time derivatives
-    coarse_times = np.linspace(0, BURN_TIME, 20)
-    amplitudes = 1e-4 * gaussian_source(
-        coarse_times[:, np.newaxis], BURN_TIME / 2.0, radius=BURN_TIME / 2.0
-    )
-
-    print("Caching time derivatives...")
-    c_dts = []
-    for i, (t, amplitude) in enumerate(zip(coarse_times, amplitudes)):
-        S[:] = gaussian_source(
-            nodes,
-            source,
-            amplitude=amplitude,
-            radius=10000.0,
-        )
-        c_dts.append(
-            dt_advection_diffusion(
-                "optimize", *args, title=f"({i + 1} of {len(coarse_times)}) "
+        with alive_bar(
+            bar_length, title="Solving advection-diffusion equation..."
+        ) as bar:
+            c = np.zeros(self.node_count)
+            sol = solve_ivp(
+                lambda t, x: self.step(t, x, vectorized=VECTORIZED[method], bar=bar),
+                (0, t_final),
+                c,
+                method=method,
+                max_step=max_step,
+                t_eval=t_eval,
+                vectorized=VECTORIZED[method],
             )
+
+        self.sol = sol
+
+        return sol
+
+    def eval_target_concentration(self, target):
+        """Evaluate the concentration at the target point."""
+        # Locate the target element
+        target_element = utils.find_element(target, self.nodes, self.node_map)
+
+        # Compute the concentration at the target point
+        target_element_concentration = sol.y[self.node_map[target_element]]
+
+        # Interpolate the concentration at the target point
+        cg1 = LagrangeElement(ReferenceTriangle, 1)
+        J = np.einsum(
+            "ja,jb",
+            self.nodes[self.node_map[target_element]],
+            cg1.cell_jacobian,
+            optimize=True,
+        )
+        local_coords = np.linalg.solve(
+            J, target - self.nodes[self.node_map[target_element][0]]
+        )
+        target_nodes = cg1.tabulate([local_coords])[0]
+        target_concentration = np.einsum(
+            "a,at->t", target_nodes, target_element_concentration
         )
 
-    # Solve the advection-diffusion equation
-    c = np.zeros(len(nodes))
-    sol = solve_ivp(
-        lambda t, x: c_dts[coarse_times.searchsorted(t, "right") - 1](x),
-        (0, t_final),
-        c,
-        method="LSODA",
-        max_step=max_step,
-    )
+        return target_concentration
 
-    return sol, nodes, node_map
+    def plot_target_concentration(self, target):
+        # Compute the concentration at the target point
+        target_concentration = self.eval_target_concentration(target)
+
+        # Plot the concentration at the target point
+        plt.plot(sol.t, target_concentration)
+        plt.plot([BURN_TIME, BURN_TIME], [0, target_concentration.max()], "r--")
+        plt.xlabel("Time")
+        plt.ylabel("Concentration")
+        plt.title("Concentration at Reading over time")
+        plt.show()
+
+    def save_animation(self, temp_dir=Path("./tmp")):
+        # Setup
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+
+        for i, t in alive_it(
+            enumerate(sol.t), total=len(sol.t), title="Saving figures..."
+        ):
+            # Plot the concentration
+            plt.figure()
+            plt.tripcolor(
+                self.nodes[:, 0], self.nodes[:, 1], self.node_map, sol.y[:, i]
+            )
+            plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
+            plt.plot(*READING, "bo", label="Reading")
+
+            plt.title(f"Concentration at time {t}")
+            plt.legend()
+            plt.colorbar()
+
+            plt.tight_layout()
+
+            # Save the figure
+            plt.savefig(f"tmp/{i:04d}.jpg")
+
+            # Close the figure
+            plt.close()
+
+        # Create the gif
+        print("Creating gif...")
+        utils.save_gif(temp_dir)
+
+        # Clean up
+        print("Cleaning up...")
+        for file in temp_dir.glob("*.jpg"):
+            os.remove(file)
 
 
-def eval_target_concentration(sol, nodes, node_map, target=READING):
-    """Evaluate the concentration at the target point."""
-    # Locate the target element
-    target_element = find_element(target, nodes, node_map)
-
-    # Compute the concentration at the target point
-    target_element_concentration = sol.y[node_map[target_element]]
-
-    # Interpolate the concentration at the target point
-    cg1 = LagrangeElement(ReferenceTriangle, 1)
-    J = np.einsum(
-        "ja,jb", nodes[node_map[target_element]], cg1.cell_jacobian, optimize=True
-    )
-    local_coords = np.linalg.solve(J, target - nodes[node_map[target_element][0]])
-    target_nodes = cg1.tabulate([local_coords])[0]
-    target_concentration = np.einsum(
-        "a,at->t", target_nodes, target_element_concentration
-    )
-
-    return target_concentration
-
-
-def compute_convergence(mesh, scales, func):
+def compute_convergence(eval_time, func, kappa, scales, mesh, max_step=1e0):
     """Compute the convergence of the advection-diffusion equation."""
-    # Set global parameters
-    kappa = DIFFUSION_RATE
-    t_final = 2.0 * BURN_TIME
-
     # Iterate over the scales
     values = []
     for scale in scales:
         print(f"Running for {scale} on {mesh} mesh...")
 
-        # Solve the advection-diffusion equation
-        sol, nodes, node_map = solve_advection_diffusion(
-            t_final, kappa, mesh=mesh, scale=scale, max_step=1e3
-        )
+        try:
+            # Solve the advection-diffusion equation
+            eq = AdvectionDiffusion(kappa, mesh, scale)
+            _ = eq.solve(eval_time, max_step=max_step)
 
-        # Compute the concentration at the target point
-        target_concentration = eval_target_concentration(sol, nodes, node_map)
+            # Store the value
+            values.append(func(eq))
 
-        # Store the value
-        values.append(func(sol.t, target_concentration))
+        except KeyboardInterrupt:  # Allow for early termination
+            print("Terminating early...")
+            break
 
     return values
 
@@ -271,51 +351,41 @@ def compute_convergence(mesh, scales, func):
 if __name__ == "__main__":
     # Set global parameters
     kappa = DIFFUSION_RATE
-    t_final = 2 * BURN_TIME
+    t_final = 2.0 * BURN_TIME
+    max_step = 1e1
+    t_eval = np.linspace(0, t_final, 100)
 
     # Solve the advection-diffusion equation
-    sol, nodes, node_map = solve_advection_diffusion(
-        t_final, kappa, mesh="las", scale="10k", max_step=1e3
-    )
-
-    # Compute the concentration at the target point
-    target_concentration = eval_target_concentration(sol, nodes, node_map)
+    eq = AdvectionDiffusion(kappa, "esw", "25k")
+    sol = eq.solve(t_final, max_step=max_step, t_eval=t_eval)
 
     # Plot the concentration at the target point
-    plt.plot(sol.t, target_concentration)
-    plt.plot([BURN_TIME, BURN_TIME], [0, target_concentration.max()], "r--")
-    plt.xlabel("Time")
-    plt.ylabel("Concentration")
-    plt.title("Concentration at Reading over time")
-    plt.show()
+    eq.plot_target_concentration(READING)
 
-    # Plot the concentration over the mesh
-    for i in range(0, len(sol.t), len(sol.t) // 10):
-        plt.tripcolor(
-            nodes[:, 0],
-            nodes[:, 1],
-            node_map,
-            sol.y[:, i],  # shading="gouraud"
-        )
-        plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
-        plt.plot(*READING, "bo", label="Reading")
-        plt.colorbar()
-        plt.title(f"Time: {sol.t[i]:.2f}")
-        plt.show()
+    # Create an animation of the concentration over the mesh
+    # I am aware FuncAnimation exists, but it is unbearably slow in this case
+    print("Creating animation...")
+    eq.save_animation()
+    print("Done!")
 
     # Compute the convergence
     eval_time = BURN_TIME
     # mesh, scales_str = "esw", ["100k", "50k", "25k", "12_5k", "6_25k"]
-    mesh, scales_str = "las", ["40k", "20k", "10k", "5k", "2_5k", "1_25k"]
+    mesh, scales_str = "las", ["40k", "20k", "10k", "5k", "2_5k"]  # , "1_25k"]
     scales = [1e3 * float(s.replace("_", ".").replace("k", "")) for s in scales_str]
 
     values = compute_convergence(
-        mesh, scales_str, lambda t, c: c[t.searchsorted(eval_time, "right")]
+        eval_time,
+        lambda eq: eq.eval_target_concentration(READING)[0],
+        kappa,
+        scales_str,
+        mesh,
     )
     errors = np.abs(values - values[-1])
 
     # Plot the convergence
-    plt.loglog(scales, errors, "o-")
+    print(scales[: len(errors)], errors)
+    plt.loglog(scales[: len(errors)], errors, "o-")
     plt.xlabel("Scale")
     plt.ylabel("Concentration")
     plt.show()
