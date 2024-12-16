@@ -349,7 +349,7 @@ class AdvectionDiffusion:
 
         # Compute the total concentration at each time
         total_concentration = np.zeros(len(sol.t))
-        for e in alive_it(self.node_map, title="Construcing stiffness matrix..."):
+        for e in alive_it(self.node_map, title="Evaluting total concentration..."):
             J = np.einsum("ja,jb", self.nodes[e], fe.cell_jacobian, optimize=True)
             det_J = abs(np.linalg.det(J))
 
