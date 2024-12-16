@@ -20,25 +20,23 @@ import matplotlib.pyplot as plt
 import os
 from pathlib import Path
 
-VECTORIZED = {
-    "RK45": False,
-    "RK23": False,
-    "Radau": False,
-    "BDF": True,
-    "LSODA": False,
-}
-CALL_ESTIMATES = {
-    "RK45": 5,
-    "RK23": 3,
-    "Radau": 5,
-    "BDF": 1,
-    "LSODA": 5,
-}
-
-METHOD = "RK23"
-
 
 class AdvectionDiffusion:
+    VECTORIZED = {
+        "RK45": False,
+        "RK23": False,
+        "Radau": False,
+        "BDF": True,
+        "LSODA": False,
+    }
+    CALL_ESTIMATES = {
+        "RK45": 5,  # Accurate
+        "RK23": 3,  # Accurate
+        "Radau": 5,  # Inaccurate
+        "BDF": 1,  # Accurate
+        "LSODA": 5,  # Inaccurate
+    }
+
     def __init__(
         self,
         kappa,
@@ -271,20 +269,22 @@ class AdvectionDiffusion:
     def solve(self, t_final, max_step, t_eval=None, method="RK23", bar_length=None):
         """Solve the advection-diffusion equation."""
         if bar_length is None:
-            bar_length = CALL_ESTIMATES[method] * int(t_final / max_step)
+            bar_length = self.CALL_ESTIMATES[method] * int(t_final / max_step)
 
         with alive_bar(
             bar_length, title="Solving advection-diffusion equation..."
-        ) as bar:
+        ) as bar:  # Progress is estimated using the number of calls
             c = np.zeros(self.node_count)
             sol = solve_ivp(
-                lambda t, x: self.step(t, x, vectorized=VECTORIZED[method], bar=bar),
+                lambda t, x: self.step(
+                    t, x, vectorized=self.VECTORIZED[method], bar=bar
+                ),
                 (0, t_final),
                 c,
                 method=method,
                 max_step=max_step,
                 t_eval=t_eval,
-                vectorized=VECTORIZED[method],
+                vectorized=self.VECTORIZED[method],
             )
 
         self.sol = sol
