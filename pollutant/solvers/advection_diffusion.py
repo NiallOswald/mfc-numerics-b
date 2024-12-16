@@ -478,6 +478,7 @@ if __name__ == "__main__":
     mesh, scales_str = "las", ["40k", "20k", "10k", "5k", "2_5k"]  # , "1_25k"]
     scales = [1e3 * float(s.replace("_", ".").replace("k", "")) for s in scales_str]
 
+    print("Computing convergence...")
     values = compute_convergence(
         eval_time,
         lambda eq: eq.eval_target_concentration(READING)[0],
@@ -486,6 +487,7 @@ if __name__ == "__main__":
         mesh,
     )
     errors = np.abs(values - values[-1])
+    print("Done!")
 
     # Plot the convergence
     plt.loglog(scales[: len(errors)], errors, "o-")
