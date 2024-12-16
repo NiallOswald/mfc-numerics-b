@@ -66,7 +66,7 @@ def process_weather_data():
         help="Start of datetime range to include.",
     )
     parser.add_argument(
-        "--end", type=str, default="2005-10-31 06:00:00", help="End of datetime range."
+        "--end", type=str, default="2005-10-31 05:00:00", help="End of datetime range."
     )
     parser.add_argument(
         "--output", type=str, default="wind_data.csv", help="Output path for the CSV."
