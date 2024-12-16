@@ -33,6 +33,14 @@ def gaussian_source(x, x0, amplitude=1.0, radius=1.0, order=2.0):
     return np.nan_to_num(val, nan=0.0)
 
 
+def gaussian_source_simple(x, x0, amplitude=1.0, radius=1.0, order=2.0):
+    if np.linalg.norm(x - x0) >= radius:
+        return 0.0
+    else:
+        val = amplitude * np.exp(-1 / (1 - np.linalg.norm((x - x0) / radius) ** order))
+        return np.nan_to_num(val, nan=0.0)
+
+
 def find_element(x, nodes, node_map):
     """Find the element containing the point x."""
     for i, element in enumerate(node_map):
