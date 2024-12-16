@@ -288,6 +288,46 @@ class AdvectionDiffusion:
         plt.title("Concentration at Reading over time")
         plt.show()
 
+    def eval_total_concentration(self):
+        # Get the quadrature points and weights
+        points, weights = gauss_quadrature(ReferenceTriangle, 2)
+
+        # Define the finite element
+        fe = LagrangeElement(ReferenceTriangle, 1)
+
+        # Tabulate the shape functions
+        phi = fe.tabulate(points)
+
+        # Compute the total concentration at each time
+        total_concentration = np.zeros(len(sol.t))
+        for e in alive_it(self.node_map, title="Construcing stiffness matrix..."):
+            J = np.einsum("ja,jb", self.nodes[e], fe.cell_jacobian, optimize=True)
+            det_J = abs(np.linalg.det(J))
+
+            total_concentration += (
+                np.einsum(
+                    "qa,at,q->t",
+                    phi,
+                    sol.y[e],
+                    weights,
+                    optimize=True,
+                )
+            ) * det_J
+
+        return total_concentration
+
+    def plot_total_concentration(self):
+        # Compute the total concentration at each time
+        total_concentration = self.eval_total_concentration()
+
+        # Plot the total concentration
+        plt.plot(sol.t, total_concentration)
+        plt.plot([BURN_TIME, BURN_TIME], [0, total_concentration.max()], "r--")
+        plt.xlabel("Time")
+        plt.ylabel("Concentration")
+        plt.title("Total concentration over time")
+        plt.show()
+
     def save_animation(self, temp_dir=Path("./tmp")):
         # Setup
         if not os.path.exists(temp_dir):
@@ -361,6 +401,9 @@ if __name__ == "__main__":
 
     # Plot the concentration at the target point
     eq.plot_target_concentration(READING)
+
+    # Plot the total concentration
+    eq.plot_total_concentration()
 
     # Create an animation of the concentration over the mesh
     # I am aware FuncAnimation exists, but it is unbearably slow in this case
