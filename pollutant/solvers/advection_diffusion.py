@@ -317,6 +317,14 @@ class AdvectionDiffusion:
 
         return target_concentration
 
+    def integrate_target_concentration(self, target):
+        """Integrate the concentration at the target point."""
+        # Compute the concentration at the target point
+        target_concentration = self.eval_target_concentration(target)
+
+        # Integrate the concentration at the target point
+        return np.trapezoid(target_concentration, sol.t)
+
     def plot_target_concentration(self, target):
         # Compute the concentration at the target point
         target_concentration = self.eval_target_concentration(target)
@@ -448,6 +456,12 @@ if __name__ == "__main__":
 
     # Plot the concentration at the target point
     eq.plot_target_concentration(READING)
+
+    # Compute the integral of the concentration at the target point
+    print(
+        "Integral of concentration at Reading:",
+        eq.integrate_target_concentration(READING),
+    )
 
     # Plot the total concentration
     eq.plot_total_concentration()
