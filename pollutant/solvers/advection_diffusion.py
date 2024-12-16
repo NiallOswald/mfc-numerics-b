@@ -59,13 +59,54 @@ class AdvectionDiffusion:
         self.S = utils.gaussian_source(
             self.nodes, SOUTHAMPTON, radius=10000.0, order=2.0
         )
+        print("Auto-nomalizing the source...")
+        self.norm = self.auto_normalize()
+        print("Done!")
 
         self._cache_assembly()
 
+    @staticmethod
+    def _amplitude(t):
+        return utils.gaussian_source_simple(t, BURN_TIME / 2.0, radius=BURN_TIME / 2.0)
+
     def amplitude(self, t):
-        return 1e-2 * utils.gaussian_source_simple(
-            t, BURN_TIME / 2.0, radius=BURN_TIME / 2.0
-        )
+        return self.norm * self._amplitude(t)
+
+    def auto_normalize(self):
+        """Automatically normalize the source."""
+        # Integrate the source over the domain
+        # Get the quadrature points and weights
+        points, weights = gauss_quadrature(ReferenceTriangle, 2)
+
+        # Define the finite element
+        fe = LagrangeElement(ReferenceTriangle, 1)
+
+        # Tabulate the shape functions and their gradients
+        phi = fe.tabulate(points)
+
+        # Compute the global mass and stiffness matrix
+        total_mass = 0.0
+        for e in alive_it(self.node_map, title="Integrating the source..."):
+            J = np.einsum("ja,jb", self.nodes[e], fe.cell_jacobian, optimize=True)
+            det_J = abs(np.linalg.det(J))
+
+            total_mass += (
+                np.einsum(
+                    "qa,a,q",
+                    phi,
+                    self.S[e],
+                    weights,
+                    optimize=True,
+                )
+                * det_J
+            )
+
+        # Integrate the amplitude over time
+        time_grid = np.linspace(0, 2 * BURN_TIME, 100)
+        amplitude_vals = np.array([self._amplitude(t) for t in time_grid])
+        total_amplitude = np.trapezoid(amplitude_vals, time_grid)
+
+        return 1 / (total_amplitude * total_mass)
 
     def load_weather_data(self):
         """Load the weather data."""
