@@ -433,7 +433,6 @@ if __name__ == "__main__":
     errors = np.abs(values - values[-1])
 
     # Plot the convergence
-    print(scales[: len(errors)], errors)
     plt.loglog(scales[: len(errors)], errors, "o-")
     plt.xlabel("Scale")
     plt.ylabel("Concentration")
