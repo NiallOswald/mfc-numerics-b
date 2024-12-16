@@ -13,12 +13,12 @@ from pollutant.constants import (
 )
 
 from alive_progress import alive_it, alive_bar
-import numpy as np
-from scipy.integrate import solve_ivp
-import scipy.sparse as sp
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 from pathlib import Path
+from scipy.integrate import solve_ivp
+import scipy.sparse as sp
 
 
 class AdvectionDiffusion:
