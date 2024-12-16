@@ -333,37 +333,43 @@ class AdvectionDiffusion:
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
 
-        for i, t in alive_it(
-            enumerate(sol.t), total=len(sol.t), title="Saving figures..."
-        ):
-            # Plot the concentration
-            plt.figure()
-            plt.tripcolor(
-                self.nodes[:, 0], self.nodes[:, 1], self.node_map, sol.y[:, i]
-            )
-            plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
-            plt.plot(*READING, "bo", label="Reading")
+        try:
+            # Save the frames
+            for i, t in alive_it(
+                enumerate(sol.t), total=len(sol.t), title="Saving figures..."
+            ):
+                # Plot the concentration
+                plt.figure()
+                plt.tripcolor(
+                    self.nodes[:, 0], self.nodes[:, 1], self.node_map, sol.y[:, i]
+                )
+                plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
+                plt.plot(*READING, "bo", label="Reading")
 
-            plt.title(f"Concentration at time {t}")
-            plt.legend()
-            plt.colorbar()
+                plt.title(f"Concentration at time {t}")
+                plt.legend()
+                plt.colorbar()
 
-            plt.tight_layout()
+                plt.tight_layout()
 
-            # Save the figure
-            plt.savefig(f"tmp/{i:04d}.jpg")
+                # Save the figure
+                plt.savefig(f"tmp/{i:04d}.jpg")
 
-            # Close the figure
-            plt.close()
+                # Close the figure
+                plt.close()
 
-        # Create the gif
-        print("Creating gif...")
-        utils.save_gif(temp_dir)
+            # Create the gif
+            print("Creating gif...")
+            utils.save_gif(temp_dir)
 
-        # Clean up
-        print("Cleaning up...")
-        for file in temp_dir.glob("*.jpg"):
-            os.remove(file)
+        except KeyboardInterrupt:
+            pass
+
+        finally:
+            # Clean up
+            print("Cleaning up...")
+            for file in temp_dir.glob("*.jpg"):
+                os.remove(file)
 
 
 def compute_convergence(eval_time, func, kappa, scales, mesh, max_step=1e0):
