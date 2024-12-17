@@ -125,7 +125,9 @@ class AdvectionDiffusion:
         u_data = self.load_weather_data()
         self.t_data = np.sort(np.array(list(u_data.keys())))
         self.matrix_data = [
-            self._assemble(self.S, u_data[t], title=f"({i + 1} / {len(self.t_data)}) ")
+            self._assemble(
+                self.S, u_data[t], title=f"({(i + 1):02} / {len(self.t_data)}) "
+            )
             for i, t in enumerate(self.t_data)
         ]
 
