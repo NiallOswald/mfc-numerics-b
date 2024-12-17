@@ -325,7 +325,7 @@ class AdvectionDiffusion:
         # Integrate the concentration at the target point
         return np.trapezoid(target_concentration, sol.t)
 
-    def plot_target_concentration(self, target):
+    def plot_target_concentration(self, target, savefig=False):
         # Compute the concentration at the target point
         target_concentration = self.eval_target_concentration(target)
 
@@ -335,7 +335,11 @@ class AdvectionDiffusion:
         plt.xlabel("Time")
         plt.ylabel("Concentration")
         plt.title("Concentration at Reading over time")
-        plt.show()
+
+        if savefig:
+            plt.savefig("target_concentration.pdf", dpi=300)
+        else:
+            plt.show()
 
     def eval_total_concentration(self):
         # Get the quadrature points and weights
@@ -365,7 +369,7 @@ class AdvectionDiffusion:
 
         return total_concentration
 
-    def plot_total_concentration(self):
+    def plot_total_concentration(self, savefig=False):
         # Compute the total concentration at each time
         total_concentration = self.eval_total_concentration()
 
@@ -375,7 +379,11 @@ class AdvectionDiffusion:
         plt.xlabel("Time")
         plt.ylabel("Concentration")
         plt.title("Total concentration over time")
-        plt.show()
+
+        if savefig:
+            plt.savefig("total_concentration.pdf", dpi=300)
+        else:
+            plt.show()
 
     def save_animation(self, temp_dir=Path("./tmp")):
         # Setup
@@ -455,7 +463,7 @@ if __name__ == "__main__":
     sol = eq.solve(t_final, max_step=max_step, t_eval=t_eval)
 
     # Plot the concentration at the target point
-    eq.plot_target_concentration(READING)
+    eq.plot_target_concentration(READING, savefig=True)
 
     # Compute the integral of the concentration at the target point
     print(
@@ -464,7 +472,7 @@ if __name__ == "__main__":
     )
 
     # Plot the total concentration
-    eq.plot_total_concentration()
+    eq.plot_total_concentration(savefig=True)
 
     # Create an animation of the concentration over the mesh
     # I am aware FuncAnimation exists, but it is unbearably slow in this case
