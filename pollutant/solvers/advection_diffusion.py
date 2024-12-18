@@ -401,6 +401,10 @@ class AdvectionDiffusion:
 
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
+        elif os.listdir(temp_dir) != []:
+            raise FileExistsError(
+                "Temporary directory is not empty. Please clear it before continuing."
+            )
 
         try:
             # Save the frames
@@ -436,7 +440,7 @@ class AdvectionDiffusion:
             # Clean up
             print("Cleaning up...")
             for file in temp_dir.glob("*.jpg"):
-                os.remove(file)
+                os.remove(file)  # This is dangerous
 
 
 def compute_convergence(eval_time, func, kappa, scales, mesh, max_step=1e0):
