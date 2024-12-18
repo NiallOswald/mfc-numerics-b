@@ -170,3 +170,6 @@ cython_debug/
 
 # Weather station data
 data/
+
+# Temporary files
+tmp/
