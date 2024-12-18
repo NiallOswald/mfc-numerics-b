@@ -299,7 +299,7 @@ class AdvectionDiffusion:
         target_element = utils.find_element(target, self.nodes, self.node_map)
 
         # Compute the concentration at the target point
-        target_element_concentration = sol.y[self.node_map[target_element]]
+        target_element_concentration = self.sol.y[self.node_map[target_element]]
 
         # Interpolate the concentration at the target point
         cg1 = LagrangeElement(ReferenceTriangle, 1)
@@ -325,14 +325,14 @@ class AdvectionDiffusion:
         target_concentration = self.eval_target_concentration(target)
 
         # Integrate the concentration at the target point
-        return np.trapezoid(target_concentration, sol.t)
+        return np.trapezoid(target_concentration, self.sol.t)
 
     def plot_target_concentration(self, target, savefig=False):
         # Compute the concentration at the target point
         target_concentration = self.eval_target_concentration(target)
 
         # Plot the concentration at the target point
-        plt.plot(sol.t, target_concentration)
+        plt.plot(self.sol.t, target_concentration)
         plt.plot([BURN_TIME, BURN_TIME], [0, target_concentration.max()], "r--")
         plt.xlabel("Time")
         plt.ylabel("Concentration")
@@ -354,7 +354,7 @@ class AdvectionDiffusion:
         phi = fe.tabulate(points)
 
         # Compute the total concentration at each time
-        total_concentration = np.zeros(len(sol.t))
+        total_concentration = np.zeros(len(self.sol.t))
         for e in alive_it(self.node_map, title="Evaluting total concentration..."):
             J = np.einsum("ja,jb", self.nodes[e], fe.cell_jacobian, optimize=True)
             det_J = abs(np.linalg.det(J))
@@ -363,7 +363,7 @@ class AdvectionDiffusion:
                 np.einsum(
                     "qa,at,q->t",
                     phi,
-                    sol.y[e],
+                    self.sol.y[e],
                     weights,
                     optimize=True,
                 )
@@ -376,7 +376,7 @@ class AdvectionDiffusion:
         total_concentration = self.eval_total_concentration()
 
         # Plot the total concentration
-        plt.plot(sol.t, total_concentration)
+        plt.plot(self.sol.t, total_concentration)
         plt.plot([BURN_TIME, BURN_TIME], [0, total_concentration.max()], "r--")
         plt.xlabel("Time")
         plt.ylabel("Concentration")
@@ -395,12 +395,12 @@ class AdvectionDiffusion:
         try:
             # Save the frames
             for i, t in alive_it(
-                enumerate(sol.t), total=len(sol.t), title="Saving figures..."
+                enumerate(self.sol.t), total=len(sol.t), title="Saving figures..."
             ):
                 # Plot the concentration
                 plt.figure()
                 plt.tripcolor(
-                    self.nodes[:, 0], self.nodes[:, 1], self.node_map, sol.y[:, i]
+                    self.nodes[:, 0], self.nodes[:, 1], self.node_map, self.sol.y[:, i]
                 )
                 plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
                 plt.plot(*READING, "bo", label="Reading")
