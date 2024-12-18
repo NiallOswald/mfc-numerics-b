@@ -20,6 +20,11 @@ from pathlib import Path
 from scipy.integrate import solve_ivp
 import scipy.sparse as sp
 
+plt.rcParams["font.size"] = 12
+
+ESW_SCALES = ["100k", "50k", "25k", "12_5k", "6_25k"]
+LAS_SCALES = ["40k", "20k", "10k", "5k", "2_5k", "1_25k"]
+
 
 class AdvectionDiffusion:
     VECTORIZED = {
@@ -332,10 +337,11 @@ class AdvectionDiffusion:
         target_concentration = self.eval_target_concentration(target)
 
         # Plot the concentration at the target point
-        plt.plot(self.sol.t, target_concentration)
-        plt.plot([BURN_TIME, BURN_TIME], [0, target_concentration.max()], "r--")
-        plt.xlabel("Time")
-        plt.ylabel("Concentration")
+        plt.figure(figsize=(8, 6))
+        plt.plot(self.sol.t, target_concentration, "k-")
+        plt.plot([BURN_TIME, BURN_TIME], [0, target_concentration.max()], "k--")
+        plt.xlabel(r"Time ($s$)")
+        plt.ylabel(r"Concentration ($m^{-2}$)")
         plt.title("Concentration at Reading over time")
 
         if savefig:
@@ -376,11 +382,12 @@ class AdvectionDiffusion:
         total_concentration = self.eval_total_concentration()
 
         # Plot the total concentration
-        plt.plot(self.sol.t, total_concentration)
-        plt.plot([BURN_TIME, BURN_TIME], [0, total_concentration.max()], "r--")
-        plt.xlabel("Time")
-        plt.ylabel("Concentration")
-        plt.title("Total concentration over time")
+        plt.figure(figsize=(8, 6))
+        plt.plot(self.sol.t, total_concentration, "k-")
+        plt.plot([BURN_TIME, BURN_TIME], [0, total_concentration.max()], "k--")
+        plt.xlabel(r"Time ($s$)")
+        plt.ylabel("Pollutant")
+        plt.title("Total mass of pollutant over time")
 
         if savefig:
             plt.savefig("total_concentration.pdf", dpi=300)
@@ -398,7 +405,7 @@ class AdvectionDiffusion:
                 enumerate(self.sol.t), total=len(sol.t), title="Saving figures..."
             ):
                 # Plot the concentration
-                plt.figure()
+                plt.figure(figsize=(8, 6))
                 plt.tripcolor(
                     self.nodes[:, 0], self.nodes[:, 1], self.node_map, self.sol.y[:, i]
                 )
@@ -496,11 +503,7 @@ if __name__ == "__main__":
         scales_str,
         mesh,
     )
-    errors = np.abs(values - values[-1])
     print("Done!")
 
-    # Plot the convergence
-    plt.loglog(scales[: len(errors)], errors, "o-")
-    plt.xlabel("Scale")
-    plt.ylabel("Concentration")
-    plt.show()
+    # Report the convergence
+    print("Values:", values)
