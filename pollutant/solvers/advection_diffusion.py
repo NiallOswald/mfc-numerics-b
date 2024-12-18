@@ -479,6 +479,30 @@ if __name__ == "__main__":
     max_step = 1e1
     t_eval = np.linspace(0, t_final, 1000)
 
+    # Input the mesh and scale
+    while True:
+        mesh = input("Enter mesh (esw/las): ")
+        if mesh in ["esw", "las"]:
+            break
+        else:
+            print("Invalid mesh. Must be one of: esw, las")
+
+    if mesh == "esw":
+        while True:
+            scale = input("Enter scale: ")
+            if scale in ESW_SCALES:
+                break
+            else:
+                print("Invalid scale. Must be one of:", ESW_SCALES)
+
+    elif mesh == "las":
+        while True:
+            scale = input("Enter scale: ")
+            if scale in LAS_SCALES:
+                break
+            else:
+                print("Invalid scale. Must be one of:", LAS_SCALES)
+
     # Solve the advection-diffusion equation
     eq = AdvectionDiffusion(kappa, mesh, scale)
     sol = eq.solve(t_final, max_step=max_step, t_eval=t_eval)
@@ -501,21 +525,36 @@ if __name__ == "__main__":
     eq.save_animation(frames=range(0, len(sol.t), 10))
     print("Done!")
 
-    # Compute the convergence
-    eval_time = BURN_TIME
-    # mesh, scales_str = "esw", ["100k", "50k", "25k", "12_5k", "6_25k"]
-    mesh, scales_str = "las", ["40k", "20k", "10k", "5k", "2_5k"]  # , "1_25k"]
-    scales = [1e3 * float(s.replace("_", ".").replace("k", "")) for s in scales_str]
+    # Run the convergence test
+    if input("Run convergence test? (y/n): ").lower() == "y":
+        # Select the mesh
+        mesh = input("Enter mesh (esw/las): ")
+        if mesh == "esw":
+            scales_str = ESW_SCALES
+        elif mesh == "las":
+            scales_str = LAS_SCALES
+        else:
+            raise ValueError("Invalid mesh type. Must be 'esw' or 'las'.")
 
-    print("Computing convergence...")
-    values = compute_convergence(
-        eval_time,
-        lambda eq: eq.eval_target_concentration(READING)[0],
-        kappa,
-        scales_str,
-        mesh,
-    )
-    print("Done!")
+        print(
+            f"Running on {mesh} mesh until scale {scales_str[-1]}. "
+            "Use Ctrl+C to terminate early."
+        )
 
-    # Report the convergence
-    print("Values:", values)
+        # Compute the convergence
+        eval_time = BURN_TIME
+        scales = [1e3 * float(s.replace("_", ".").replace("k", "")) for s in scales_str]
+
+        print("Computing convergence...")
+        values = compute_convergence(
+            eval_time,
+            lambda eq: eq.eval_target_concentration(READING)[0],
+            kappa,
+            scales_str,
+            mesh,
+            max_step=max_step,
+        )
+        print("Done!")
+
+        # Report the convergence
+        print("Values:", values)
