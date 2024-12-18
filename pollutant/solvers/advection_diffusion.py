@@ -456,10 +456,14 @@ def compute_convergence(eval_time, func, kappa, scales, mesh, max_step=1e0):
         try:
             # Solve the advection-diffusion equation
             eq = AdvectionDiffusion(kappa, mesh, scale)
-            _ = eq.solve(eval_time, max_step=max_step)
+            sol = eq.solve(eval_time, max_step=max_step, t_eval=[eval_time])
 
             # Store the value
-            values.append(func(eq))
+            if sol.status == 0:
+                print(func(eq))
+                values.append(func(eq))
+            else:  # Store NaN if the integration failed
+                values.append(np.nan)
 
         except KeyboardInterrupt:  # Allow for early termination
             print("Terminating early...")
@@ -476,7 +480,7 @@ if __name__ == "__main__":
     t_eval = np.linspace(0, t_final, 1000)
 
     # Solve the advection-diffusion equation
-    eq = AdvectionDiffusion(kappa, "esw", "25k")
+    eq = AdvectionDiffusion(kappa, mesh, scale)
     sol = eq.solve(t_final, max_step=max_step, t_eval=t_eval)
 
     # Plot the concentration at the target point
