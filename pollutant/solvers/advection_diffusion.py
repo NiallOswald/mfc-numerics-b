@@ -475,7 +475,7 @@ def compute_convergence(eval_time, func, kappa, scales, mesh, max_step=1e0):
 if __name__ == "__main__":
     # Set global parameters
     kappa = DIFFUSION_RATE
-    t_final = 2.0 * BURN_TIME
+    t_final = 1.6 * BURN_TIME
     max_step = 1e1
     t_eval = np.linspace(0, t_final, 1000)
 
