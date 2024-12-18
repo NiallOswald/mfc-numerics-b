@@ -394,16 +394,17 @@ class AdvectionDiffusion:
         else:
             plt.show()
 
-    def save_animation(self, temp_dir=Path("./tmp")):
+    def save_animation(self, frames=None, temp_dir=Path("./tmp")):
         # Setup
+        if frames is None:
+            frames = range(len(self.sol.t))
+
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
 
         try:
             # Save the frames
-            for i, t in alive_it(
-                enumerate(self.sol.t), total=len(sol.t), title="Saving figures..."
-            ):
+            for i in alive_it(frames, total=len(frames), title="Saving figures..."):
                 # Plot the concentration
                 plt.figure(figsize=(8, 6))
                 plt.tripcolor(
@@ -412,7 +413,7 @@ class AdvectionDiffusion:
                 plt.plot(*SOUTHAMPTON, "ro", label="Southampton")
                 plt.plot(*READING, "bo", label="Reading")
 
-                plt.title(f"Concentration at time {t}")
+                plt.title(f"Concentration at time {self.sol.t[i]:.2f}")
                 plt.legend()
                 plt.colorbar()
 
@@ -465,7 +466,7 @@ if __name__ == "__main__":
     kappa = DIFFUSION_RATE
     t_final = 2.0 * BURN_TIME
     max_step = 1e1
-    t_eval = np.linspace(0, t_final, 100)
+    t_eval = np.linspace(0, t_final, 1000)
 
     # Solve the advection-diffusion equation
     eq = AdvectionDiffusion(kappa, "esw", "25k")
@@ -486,7 +487,7 @@ if __name__ == "__main__":
     # Create an animation of the concentration over the mesh
     # I am aware FuncAnimation exists, but it is unbearably slow in this case
     print("Creating animation...")
-    eq.save_animation()
+    eq.save_animation(frames=range(0, len(sol.t), 10))
     print("Done!")
 
     # Compute the convergence
