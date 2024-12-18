@@ -296,6 +296,9 @@ class AdvectionDiffusion:
 
         self.sol = sol
 
+        if sol.status != 0:
+            print("Warning: Integration failed.")
+
         return sol
 
     def eval_target_concentration(self, target):
