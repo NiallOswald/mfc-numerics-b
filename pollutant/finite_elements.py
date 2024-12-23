@@ -1,12 +1,24 @@
-from .reference_elements import ReferenceInterval, ReferenceTriangle
+"""Finite elements on reference cells."""
+
+from .reference_elements import ReferenceCell, ReferenceInterval, ReferenceTriangle
+from typing import Callable
 import numpy as np
 
 np.seterr(invalid="ignore", divide="ignore")
 
 
-def lagrange_points(cell, degree):
+def lagrange_points(cell: ReferenceCell, degree: int) -> np.ndarray:
     """Construct the locations of the Lagrange points for polynomials of the
     specified degree in two dimensions.
+
+    Adapted from an implementation of `fe_utils
+        <https://github.com/Imperial-MATH60022/finite-element-2022-NiallOswald>`.
+
+    :param cell: The :class:.`~reference_elements.ReferenceCell` to use
+    :param degree: The degree of the polynomials.
+
+    :returns: An array of shape (n, 2) containing the coordinates of the
+        Lagrange points.
     """
 
     cube = np.indices([degree + 1] * cell.dim)[::-1]
@@ -14,9 +26,23 @@ def lagrange_points(cell, degree):
     return np.stack(cube, axis=-1)[coords_sum <= degree] / degree
 
 
-def vandermonde_matrix(cell, degree, points, grad=False):
+def vandermonde_matrix(
+    cell: ReferenceCell, degree: int, points: list, grad: bool = False
+) -> np.ndarray:
     """Construct the generalised Vandermonde matrix for polynomials of the
     specified degree in two dimensions.
+
+    Adapted from an implementation of `fe_utils
+        <https://github.com/Imperial-MATH60022/finite-element-2022-NiallOswald>`.
+
+    :param cell: The :class:.`~reference_elements.ReferenceCell` to use.
+    :param degree: The degree of the polynomials.
+    :param points: An array of shape (m, 2) containing the coordinates of the points
+        at which to evaluate the Vandermonde matrix.
+    :param grad: If True, return the gradient of the Vandermonde matrix.
+
+    :returns: If grad is False, an array of shape (m, n) containing the Vandermonde
+        matrix. If grad is True, an array of shape (m, n, cell.dim)
     """
 
     # Cast points to a np.ndarray
@@ -54,7 +80,17 @@ def vandermonde_matrix(cell, degree, points, grad=False):
 
 
 class FiniteElement:
-    def __init__(self, cell, degree, nodes):
+    """A finite element on a reference cell."""
+
+    def __init__(self, cell: ReferenceCell, degree: int, nodes: np.ndarray):
+        """Initialise the finite element.
+
+        :param cell: The :class:.`~reference_elements.ReferenceCell` of the finite
+            element.
+        :param degree: The degree of the finite element.
+        :param nodes: An array of shape (n, 2) containing the coordinates of the nodes
+            of the finite element.
+        """
         self.cell = cell
         self.degree = degree
         self.nodes = nodes
@@ -62,8 +98,20 @@ class FiniteElement:
         # Compute the coefficients of the basis functions
         self.basis_coefs = np.linalg.inv(vandermonde_matrix(cell, degree, nodes))
 
-    def tabulate(self, points, grad=False):
-        """Tabulate the basis functions at the specified points."""
+    def tabulate(self, points: np.ndarray, grad: bool = False) -> np.ndarray:
+        """Tabulate the basis functions at the specified points.
+
+        Adapted from an implementation of `fe_utils
+            <https://github.com/Imperial-MATH60022/finite-element-2022-NiallOswald>`.
+
+        :param points: An array of shape (m, 2) containing the coordinates of the
+            points at which to evaluate the basis functions.
+        :param grad: If True, return the gradient of the basis functions.
+
+        :returns: If grad is False, an array of shape (m, n) containing the
+            basis functions. If grad is True, an array of shape (m, n, cell.dim)
+            containing the gradients of the basis functions.
+        """
         return np.einsum(
             "ib...,bj->ij...",
             vandermonde_matrix(self.cell, self.degree, points, grad),
@@ -71,13 +119,26 @@ class FiniteElement:
             optimize=True,
         )
 
-    def interpolate(self, fn):
-        """Interpolate the specified function onto the finite element."""
+    def interpolate(self, fn: Callable) -> np.ndarray:
+        """Interpolate the specified function onto the nodes of a finite element.
+
+        :param fn: A function that takes a point and returns a scalar value.
+
+        :returns: An array of shape (n,) containing the basis function coefficients.
+        """
         return np.array([fn(node) for node in self.nodes])
 
 
 class LagrangeElement(FiniteElement):
-    def __init__(self, cell, degree):
+    """A Lagrange finite element on a reference cell."""
+
+    def __init__(self, cell: ReferenceCell, degree: int):
+        """Initialise the finite element.
+
+        :param cell: The :class:.`~reference_elements.ReferenceCell` of the finite
+            element.
+        :param degree: The degree of the finite element.
+        """
         nodes = lagrange_points(cell, degree)
 
         self._cell_jacobian = None
@@ -85,7 +146,14 @@ class LagrangeElement(FiniteElement):
         super(LagrangeElement, self).__init__(cell, degree, nodes)
 
     @property
-    def cell_jacobian(self):
+    def cell_jacobian(self) -> np.ndarray:
+        """The Jacobian of the finite element.
+
+        Adapted from an implementation of `fe_utils
+            <https://github.com/Imperial-MATH60022/finite-element-2022-NiallOswald>`.
+
+        :returns: An array of shape (cell.dim, cell.dim) containing the Jacobian.
+        """
         if self._cell_jacobian is None:
             cg1 = LagrangeElement(self.cell, 1)
             self._cell_jacobian = cg1.tabulate(np.zeros((1, self.cell.dim)), grad=True)[

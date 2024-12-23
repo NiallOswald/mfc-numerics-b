@@ -1,4 +1,4 @@
-"""Utilities for the finite element method."""
+"""Utilities for the pollutant model."""
 
 from pollutant.constants import FIRE_START
 from datetime import datetime
@@ -10,8 +10,17 @@ from scipy.optimize import linprog
 np.seterr(invalid="ignore", divide="ignore", over="ignore")
 
 
-def load_mesh(name: str, scale: str, path: Path = Path("mesh")):
-    """Load the mesh from a file."""
+def load_mesh(
+    name: str, scale: str, path: Path = Path("mesh")
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Load the mesh from a file.
+
+    :param name: The name of the mesh.
+    :param scale: The scale of the mesh.
+    :param path: The path to the mesh files.
+
+    :returns: A tuple containing the nodes, node map, and boundary nodes.
+    """
     nodes = np.loadtxt(path / f"{name}_grids/{name}_nodes_{scale}.txt")
     node_map = np.loadtxt(path / f"{name}_grids/{name}_IEN_{scale}.txt", dtype=np.int64)
     boundary_nodes = np.loadtxt(
@@ -23,8 +32,17 @@ def load_mesh(name: str, scale: str, path: Path = Path("mesh")):
 
 def load_weather_data(
     name: str, scale: str, path: Path = Path("data"), init_time: datetime = FIRE_START
-):
-    """Load the weather data from a file."""
+) -> dict[float, np.ndarray]:
+    """Load the weather data from a file.
+
+    :param name: The name of the mesh.
+    :param scale: The scale of the mesh.
+    :param path: The path to the weather data files.
+    :param init_time: The initial datetime of the simulation.
+
+    :returns: A dictionary containing the weather data at each available time step with
+        keys taken as the time in seconds from `init_time`.
+    """
     wind_data = dict()
     file_paths = path.glob(f"{name}_{scale}/*.csv")
     for data_path in file_paths:
@@ -35,9 +53,14 @@ def load_weather_data(
     return wind_data
 
 
-def save_gif(in_dir: Path, out_path: Path = Path("animation.gif"), **kwargs):
-    """Create a gif from the images in a directory."""
-    frames = [Image.open(image) for image in sorted(in_dir.glob("*.jpg"))]
+def save_gif(im_dir: Path, out_path: Path = Path("animation.gif"), **kwargs) -> None:
+    """Create and save a gif from images in a directory.
+
+    :param im_dir: The directory containing the images.
+    :param out_path: The path to save the gif to.
+    :param kwargs: Additional arguments to pass to `PIL.Image.save`.
+    """
+    frames = [Image.open(image) for image in sorted(im_dir.glob("*.jpg"))]
     frame_one = frames[0]
     frame_one.save(
         out_path,
@@ -48,8 +71,23 @@ def save_gif(in_dir: Path, out_path: Path = Path("animation.gif"), **kwargs):
     )
 
 
-def gaussian_source(x, x0, amplitude=1.0, radius=1.0, order=2.0):
-    """A gaussian source term."""
+def gaussian_source(
+    x: np.ndarray,
+    x0: np.ndarray,
+    amplitude: float = 1.0,
+    radius: float = 1.0,
+    order: float = 2.0,
+) -> np.ndarray:
+    """A smooth gaussian-like bump function.
+
+    :param x: The points at which to evaluate the source.
+    :param x0: The centre of the source.
+    :param amplitude: The amplitude of the source.
+    :param radius: The radius of the support.
+    :param order: The rate of decay of the source.
+
+    :returns: An array of shape (m,) containing the source values at each point.
+    """
     val = (
         amplitude
         * np.e
@@ -59,7 +97,23 @@ def gaussian_source(x, x0, amplitude=1.0, radius=1.0, order=2.0):
     return np.nan_to_num(val, nan=0.0)
 
 
-def gaussian_source_simple(x, x0, amplitude=1.0, radius=1.0, order=2.0):
+def gaussian_source_simple(
+    x: np.ndarray,
+    x0: np.ndarray,
+    amplitude: float = 1.0,
+    radius: float = 1.0,
+    order: float = 2.0,
+) -> float:
+    """A smooth gaussian-like bump function.
+
+    :param x: The point at which to evaluate the source.
+    :param x0: The centre of the source.
+    :param amplitude: The amplitude of the source.
+    :param radius: The radius of the support.
+    :param order: The rate of decay of the source.
+
+    :returns: The source value at the point.
+    """
     if np.linalg.norm(x - x0) >= radius:
         return 0.0
     else:
@@ -67,8 +121,15 @@ def gaussian_source_simple(x, x0, amplitude=1.0, radius=1.0, order=2.0):
         return np.nan_to_num(val, nan=0.0)
 
 
-def find_element(x, nodes, node_map):
-    """Find the element containing the point x."""
+def find_element(x: np.ndarray, nodes: np.ndarray, node_map: np.ndarray) -> int:
+    """Find the element containing the point of specified corrdinates.
+
+    :param x: The coordinates of the point to locate.
+    :param nodes: The coordinates of the nodes of the mesh.
+    :param node_map: The map of elements to nodes.
+
+    :returns: The index of the element containing the point.
+    """
     for i, element in enumerate(node_map):
         if is_inside(x, nodes[element]):
             return i
@@ -76,8 +137,14 @@ def find_element(x, nodes, node_map):
         raise ValueError("Point not found in any element.")
 
 
-def is_inside(x, points):
-    """Check if the point x is inside the convex hull of the points."""
+def is_inside(x: np.ndarray, points: np.ndarray) -> bool:
+    """Check if the point x is inside the convex hull of the points.
+
+    :param x: The point to check.
+    :param points: The points defining the convex hull.
+
+    :returns: True if the point is inside the convex hull, False otherwise.
+    """
     A_eq = np.vstack([points.T, np.ones(len(points))])
     b_eq = np.array([*x, 1])
     cost = np.zeros(len(points))

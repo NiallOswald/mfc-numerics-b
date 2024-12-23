@@ -3,7 +3,6 @@
 from pollutant.finite_elements import LagrangeElement
 from pollutant.reference_elements import ReferenceTriangle
 from pollutant.quadrature import gauss_quadrature
-import pollutant.utils as utils
 from pollutant.constants import (
     SOUTHAMPTON,
     READING,
@@ -11,13 +10,16 @@ from pollutant.constants import (
     DEFAULT_WIND_SPEED,
     DIFFUSION_RATE,
 )
+import pollutant.utils as utils
 
 from alive_progress import alive_it, alive_bar
+from pathlib import Path
+from scipy.integrate import solve_ivp
+from typing import Callable
+
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from pathlib import Path
-from scipy.integrate import solve_ivp
 import scipy.sparse as sp
 
 plt.rcParams["font.size"] = 12
@@ -27,6 +29,8 @@ LAS_SCALES = ["40k", "20k", "10k", "5k", "2_5k", "1_25k"]
 
 
 class AdvectionDiffusion:
+    """A class to solve the advection-diffusion equation."""
+
     VECTORIZED = {
         "RK45": False,
         "RK23": False,
@@ -44,21 +48,31 @@ class AdvectionDiffusion:
 
     def __init__(
         self,
-        kappa,
-        mesh,
-        scale,
-        boundary_type="Robin",
-        data_path=Path("data"),
+        kappa: float,
+        mesh: str,
+        scale: str,
+        boundary_type: str = "Robin",
+        data_path: Path = Path("data"),
     ):
+        """Initialise the advection-diffusion equation solver.
+
+        :param kappa: The diffusion rate.
+        :param mesh: The mesh to solve the equation on.
+        :param scale: The scale of the mesh.
+        :param boundary_type: The type of boundary condition to apply.
+        :param data_path: The path to the weather data.
+        """
         self.kappa = kappa
         self.mesh = mesh
         self.scale = scale
         self.boundary_type = boundary_type
         self.data_path = data_path
 
+        # Load the mesh
         self.nodes, self.node_map, self.boundary_nodes = utils.load_mesh(mesh, scale)
         self.node_count = len(self.nodes)
 
+        # Cache the source
         self.S = utils.gaussian_source(
             self.nodes, SOUTHAMPTON, radius=10000.0, order=2.0
         )
@@ -69,13 +83,25 @@ class AdvectionDiffusion:
         self._cache_assembly()
 
     @staticmethod
-    def _amplitude(t):
+    def _amplitude(t: float) -> float:
+        """The unnormalized amplitude of the source.
+
+        :param t: The time at which to evaluate the source.
+
+        :returns: The amplitude of the source at the specified time.
+        """
         return utils.gaussian_source_simple(t, BURN_TIME / 2.0, radius=BURN_TIME / 2.0)
 
-    def amplitude(self, t):
+    def amplitude(self, t: float) -> float:
+        """The amplitude of the source.
+
+        :param t: The time at which to evaluate the source.
+
+        :returns: The amplitude of the source at the specified time.
+        """
         return self.norm * self._amplitude(t)
 
-    def auto_normalize(self):
+    def auto_normalize(self) -> None:
         """Automatically normalize the source."""
         # Integrate the source over the domain
         # Get the quadrature points and weights
@@ -111,8 +137,11 @@ class AdvectionDiffusion:
 
         return 1 / (total_amplitude * total_mass)
 
-    def load_weather_data(self):
-        """Load the weather data."""
+    def load_weather_data(self) -> dict[float, np.ndarray]:
+        """Load the weather data.
+
+        :returns: A dictionary containing the wind speed at each time. If no data is
+            found, a constant wind speed is used."""
         try:
             u_data = utils.load_weather_data(self.mesh, self.scale, self.data_path)
 
@@ -124,7 +153,7 @@ class AdvectionDiffusion:
 
         return u_data
 
-    def _cache_assembly(self):
+    def _cache_assembly(self) -> None:
         """Cache the stiffness and mass matrices."""
         print("Caching stiffness and mass matrices...")
         u_data = self.load_weather_data()
@@ -139,8 +168,17 @@ class AdvectionDiffusion:
         # Sort the data
         self.matrix_ = np.argsort(self.t_data)
 
-    def _assemble(self, S, u, title=""):
-        """Assemble the mass and stiffness matrices."""
+    def _assemble(
+        self, S: np.ndarray, u: np.ndarray, title: str = ""
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Assemble the mass and stiffness matrices.
+
+        :param S: The source term at each node.
+        :param u: The wind speed at each node.
+        :param title: Additional information to display in the progress bar.
+
+        :returns: A tuple containing the mass matrix, stiffness matrix, and forcing.
+        """
         # Get the quadrature points and weights
         points, weights = gauss_quadrature(ReferenceTriangle, 2)
 
@@ -247,15 +285,36 @@ class AdvectionDiffusion:
 
         return M, K, f
 
-    def assemble(self, t):
+    def assemble(self, t: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return the mass and stiffness matrices at the specified time from the cache.
+
+        :param t: The time at which the matrices are required.
+
+        :returns: A tuple containing the mass matrix, stiffness matrix, and forcing.
+        """
+
         M, K, f = self.matrix_data[self.t_data.searchsorted(t, "right") - 1]
         return M, K, self.amplitude(t) * f
 
-    def _step(self, t, c):
+    def _step(self, t: float, c: np.ndarray) -> np.ndarray:
+        """Compute the time-derivative.
+
+        :param t: The time at which to evaluate the time-derivative.
+        :param c: The concentration at each node.
+
+        :returns: The time-derivative of the concentration at each node.
+        """
         M, K, f = self.assemble(t)
         return sp.linalg.spsolve(M, f - K @ c)
 
-    def _step_vectorized(self, t, c):
+    def _step_vectorized(self, t: float, c: np.ndarray) -> np.ndarray:
+        """Compute the time-derivative in a vectorized manner.
+
+        :param t: The time at which to evaluate the time-derivative.
+        :param c: The concentration at each node.
+
+        :returns: The time-derivative of the concentration at each node.
+        """
         M, K, f = self.assemble(t)
         b_mat = np.zeros(2 * [M.shape[0]])
         b_mat[:, : c.shape[1]] = c
@@ -264,8 +323,22 @@ class AdvectionDiffusion:
 
         return c_dt_mat[:, : c.shape[1]]
 
-    def step(self, t, c, vectorized=False, bar=lambda: None):
-        """Compute the time-derivative."""
+    def step(
+        self,
+        t: float,
+        c: np.ndarray,
+        vectorized: bool = False,
+        bar: Callable = lambda: None,
+    ) -> np.ndarray:
+        """Compute the time-derivative.
+
+        :param t: The time at which to evaluate the time-derivative.
+        :param c: The concentration at each node.
+        :param vectorized: If True, use the vectorized implementation.
+        :param bar: The progress bar to update.
+
+        :returns: The time-derivative of the concentration at each node.
+        """
         bar()  # Update the progress bar
 
         if vectorized:
@@ -273,11 +346,29 @@ class AdvectionDiffusion:
         else:
             return self._step(t, c)
 
-    def solve(self, t_final, max_step, t_eval=None, method="RK23", bar_length=None):
-        """Solve the advection-diffusion equation."""
+    def solve(
+        self,
+        t_final: float,
+        max_step: float,
+        t_eval: list = None,
+        method: str = "RK23",
+        bar_length: int = None,
+    ):
+        """Solve the advection-diffusion equation.
+
+        :param t_final: The final time to integrate up to.
+        :param max_step: The maximum step size.
+        :param t_eval: The times at which to evaluate the solution.
+        :param method: The integration method to use.
+        :param bar_length: The length of the progress bar. If None, it is estimated.
+
+        :returns: The solution to the advection-diffusion equation.
+        """
+        # Estimate the progress bar length
         if bar_length is None:
             bar_length = self.CALL_ESTIMATES[method] * int(t_final / max_step)
 
+        # Solve the advection-diffusion equation
         with alive_bar(
             bar_length, title="Solving advection-diffusion equation..."
         ) as bar:  # Progress is estimated using the number of calls
@@ -301,8 +392,13 @@ class AdvectionDiffusion:
 
         return sol
 
-    def eval_target_concentration(self, target):
-        """Evaluate the concentration at the target point."""
+    def eval_target_concentration(self, target: np.ndarray) -> np.ndarray:
+        """Evaluate the concentration at the target point.
+
+        :param target: The coordinates of the target point.
+
+        :returns: The concentration at the target point over time.
+        """
         # Locate the target element
         target_element = utils.find_element(target, self.nodes, self.node_map)
 
@@ -327,15 +423,27 @@ class AdvectionDiffusion:
 
         return target_concentration
 
-    def integrate_target_concentration(self, target):
-        """Integrate the concentration at the target point."""
+    def integrate_target_concentration(self, target: np.ndarray) -> float:
+        """Integrate the concentration at the target point over time.
+
+        :param target: The coordinates of the target point.
+
+        :returns: The integral of the concentration at the target point over time.
+        """
         # Compute the concentration at the target point
         target_concentration = self.eval_target_concentration(target)
 
         # Integrate the concentration at the target point
         return np.trapezoid(target_concentration, self.sol.t)
 
-    def plot_target_concentration(self, target, savefig=False):
+    def plot_target_concentration(
+        self, target: np.ndarray, savefig: bool = False
+    ) -> None:
+        """Plot the concentration at the target point over time.
+
+        :param target: The coordinates of the target point.
+        :param savefig: If True, save the figure.
+        """
         # Compute the concentration at the target point
         target_concentration = self.eval_target_concentration(target)
 
@@ -352,7 +460,11 @@ class AdvectionDiffusion:
         else:
             plt.show()
 
-    def eval_total_concentration(self):
+    def eval_total_concentration(self) -> np.ndarray:
+        """Integrate the concentration over the while domain at each time.
+
+        :returns: The total concentration over time.
+        """
         # Get the quadrature points and weights
         points, weights = gauss_quadrature(ReferenceTriangle, 2)
 
@@ -380,7 +492,11 @@ class AdvectionDiffusion:
 
         return total_concentration
 
-    def plot_total_concentration(self, savefig=False):
+    def plot_total_concentration(self, savefig: bool = False) -> None:
+        """Plot the total concentration over the whole domain.
+
+        :param savefig: If True, save the figure.
+        """
         # Compute the total concentration at each time
         total_concentration = self.eval_total_concentration()
 
@@ -397,7 +513,12 @@ class AdvectionDiffusion:
         else:
             plt.show()
 
-    def save_animation(self, frames=None, temp_dir=Path("./tmp")):
+    def save_animation(self, frames: list = None, temp_dir: Path = Path("./tmp")):
+        """Save an animation of the concentration over the mesh.
+
+        :param frames: The frames to use. If None, use all frames.
+        :param temp_dir: The directory to save the temporary files to.
+        """
         # Setup
         if frames is None:
             frames = range(len(self.sol.t))
@@ -409,6 +530,7 @@ class AdvectionDiffusion:
                 "Temporary directory is not empty. Please clear it before continuing."
             )
 
+        # Allow safe exit
         try:
             # Save the frames
             for i in alive_it(frames, total=len(frames), title="Saving figures..."):
@@ -446,8 +568,26 @@ class AdvectionDiffusion:
                 os.remove(file)  # This is dangerous
 
 
-def compute_convergence(eval_time, func, kappa, scales, mesh, max_step=1e0):
-    """Compute the convergence of the advection-diffusion equation."""
+def compute_convergence(
+    eval_time: float,
+    func: Callable,
+    kappa: float,
+    scales: list[str],
+    mesh: list[str],
+    max_step: float = 1e0,
+) -> list:
+    """Compute the convergence of the advection-diffusion equation.
+
+    :param eval_time: The time at which to evaluate the solution.
+    :param func: The function to evaluate the solution.
+    :param kappa: The diffusion rate.
+    :param scales: The scales to evaluate the solution on.
+    :param mesh: The mesh to evaluate the solution on.
+    :param max_step: The maximum step size.
+
+    :returns: A list containing the values of the function at the given time for each
+        scale.
+    """
     # Iterate over the scales
     values = []
     for scale in scales:
@@ -472,8 +612,10 @@ def compute_convergence(eval_time, func, kappa, scales, mesh, max_step=1e0):
     return values
 
 
-if __name__ == "__main__":
-    # Set global parameters
+def main():
+    """Main entry point."""
+
+    # Set the parameters
     kappa = DIFFUSION_RATE
     t_final = 1.6 * BURN_TIME
     max_step = 1e1
@@ -543,7 +685,6 @@ if __name__ == "__main__":
 
         # Compute the convergence
         eval_time = BURN_TIME
-        scales = [1e3 * float(s.replace("_", ".").replace("k", "")) for s in scales_str]
 
         print("Computing convergence...")
         values = compute_convergence(
@@ -558,3 +699,7 @@ if __name__ == "__main__":
 
         # Report the convergence
         print("Values:", values)
+
+
+if __name__ == "__main__":
+    main()
